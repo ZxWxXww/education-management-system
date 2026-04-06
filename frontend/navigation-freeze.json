@@ -1,0 +1,67 @@
+{
+  "version": "1.0.0",
+  "roles": {
+    "admin": {
+      "menu": [
+        { "title": "仪表盘" },
+        { "title": "用户管理", "children": ["角色权限管理"] },
+        { "title": "课程管理", "children": ["班级管理"] },
+        { "title": "教学资源", "children": ["作业管理", "成绩管理"] },
+        { "title": "考勤管理", "children": ["异常考勤"] },
+        { "title": "财务统计", "children": ["财单管理"] },
+        { "title": "数据报表", "children": ["对比分析"] },
+        { "title": "机构设置", "children": ["日志管理", "展示设置"] }
+      ],
+      "routeChildren": [
+        "dashboard",
+        "user/roles",
+        "course/classes",
+        "resources/assignments",
+        "resources/grades",
+        "attendance/abnormal",
+        "finance/bills",
+        "reports/comparative",
+        "settings/logs",
+        "settings/display"
+      ]
+    },
+    "teacher": {
+      "menu": [
+        { "title": "教师工作台" },
+        { "title": "我的课程", "children": ["班级详情", "班级管理"] },
+        { "title": "教学资源", "children": ["作业管理", "成绩管理"] },
+        { "title": "考勤记录", "children": ["异常考勤"] },
+        { "title": "教学数据", "children": ["成绩分析"] },
+        { "title": "个人信息", "children": ["修改密码"] }
+      ],
+      "routeChildren": [
+        "workspace",
+        "courses/classes/:id",
+        "courses/manage",
+        "resources/assignments",
+        "resources/grades",
+        "attendance/abnormal",
+        "data/grade-analysis",
+        "profile/change-password"
+      ]
+    },
+    "student": {
+      "menu": [
+        { "title": "学生学习中心" },
+        { "title": "课程列表", "children": ["班级信息"] },
+        { "title": "我的作业", "children": ["考试成绩"] },
+        { "title": "我的考勤", "children": ["考勤异常"] },
+        { "title": "学习统计", "children": ["成绩分析"] },
+        { "title": "个人信息", "children": ["修改密码"] }
+      ],
+      "routeChildren": [
+        "learning-center",
+        "courses/classes/:id",
+        "assignments/exam-scores",
+        "attendance/abnormal",
+        "statistics/grade-analysis",
+        "profile/change-password"
+      ]
+    }
+  }
+}

@@ -1,0 +1,25 @@
+server:
+  port: ${EDU_SERVER_PORT:8080}
+
+spring:
+  application:
+    name: edu-smart-manager
+  datasource:
+    url: ${EDU_DB_URL:jdbc:mysql://localhost:3306/edu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    username: ${EDU_DB_USER:root}
+    password: ${EDU_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID
+
+edu:
+  security:
+    jwt:
+      secret: ${EDU_JWT_SECRET:CHANGE_ME}
+      ttl-seconds: ${EDU_JWT_TTL_SECONDS:7200}
+
