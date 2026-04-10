@@ -1,4 +1,6 @@
 <script setup>
+import RoleSwitch from './common/RoleSwitch.vue'
+
 const props = defineProps({
   role: { type: String, required: true },
   collapsed: { type: Boolean, default: false }
@@ -18,28 +20,34 @@ function onSelect(command) {
 </script>
 
 <template>
-  <div class="header-left">
-    <el-button text @click="emit('toggle-sidebar')">
-      {{ props.collapsed ? '展开菜单' : '收起菜单' }}
-    </el-button>
-    <div class="header-title">教培智管系统</div>
-    <el-dropdown @command="onSelect">
-      <el-button size="small">
-        {{ roleOptions.find((x) => x.value === props.role)?.label || props.role }}
+  <div class="header-container">
+    <div class="header-left">
+      <el-button text @click="emit('toggle-sidebar')">
+        {{ props.collapsed ? '展开菜单' : '收起菜单' }}
       </el-button>
-      <template #dropdown>
-        <el-dropdown-menu>
-          <el-dropdown-item v-for="item in roleOptions" :key="item.value" :command="item.value">
-            {{ item.label }}
-          </el-dropdown-item>
-        </el-dropdown-menu>
-      </template>
-    </el-dropdown>
+      <div class="header-title">教培智管系统 · {{ roleOptions.find((x) => x.value === props.role)?.label }}</div>
+    </div>
+    <div class="header-right">
+      <RoleSwitch />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.header-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+}
+
 .header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-right {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -49,4 +57,3 @@ function onSelect(command) {
   font-weight: 700;
 }
 </style>
-

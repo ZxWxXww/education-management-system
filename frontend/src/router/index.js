@@ -7,14 +7,19 @@ import studentRoutes from './routes/student'
 const routes = [
   {
     path: '/',
-    redirect: '/admin/dashboard'
+    redirect: '/login'
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/common/Login.vue')
   },
   ...adminRoutes,
   ...teacherRoutes,
   ...studentRoutes,
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/admin/dashboard'
+    redirect: '/login'
   }
 ]
 
@@ -31,11 +36,24 @@ const roleHomePathMap = {
 
 router.beforeEach((to) => {
   const userStore = useUserStore()
-  const requiredRole = to.meta && to.meta.role
-  if (!requiredRole) return true
-  if (userStore.role !== requiredRole) {
-    return roleHomePathMap[userStore.role] || '/admin/dashboard'
+  
+  // 登录页不需要验证
+  if (to.path === '/login') {
+    return true
   }
+  
+  // 未登录则跳转到登录页
+  if (!userStore.token) {
+    return '/login'
+  }
+  
+  // 检查角色权限
+  const requiredRole = to.meta && to.meta.role
+  if (requiredRole && userStore.role !== requiredRole) {
+    // 角色不匹配，跳转到对应角色的首页
+    return roleHomePathMap[userStore.role] || '/login'
+  }
+  
   return true
 })
 

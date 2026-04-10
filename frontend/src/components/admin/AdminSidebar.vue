@@ -26,6 +26,10 @@ const menuRenderKey = computed(() => `${activeRootMenuPath.value}-${props.collap
 function onSelect(index) {
   router.push(index)
 }
+
+function goRoot(path) {
+  router.push(path)
+}
 </script>
 
 <template>
@@ -45,7 +49,7 @@ function onSelect(index) {
         <template v-for="item in adminMenu" :key="item.path">
           <el-sub-menu v-if="item.children && item.children.length" :index="item.path">
             <template #title>
-              <span class="admin-sidebar__menu-title">{{ item.title }}</span>
+              <span class="admin-sidebar__menu-title" @click.stop="goRoot(item.path)">{{ item.title }}</span>
             </template>
             <el-menu-item v-for="sub in item.children" :key="sub.path" :index="sub.path">
               {{ sub.title }}

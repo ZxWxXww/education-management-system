@@ -1,4 +1,4 @@
-export function getMenuByRole(role) {
+﻿﻿export function getMenuByRole(role) {
   if (role === 'admin') return adminMenu
   if (role === 'teacher') return teacherMenu
   return studentMenu
@@ -9,7 +9,14 @@ export const adminMenu = [
   {
     title: '用户管理',
     path: '/admin/user',
-    children: [{ title: '角色权限管理', path: '/admin/user/roles' }]
+    children: [
+      { title: '角色权限管理', path: '/admin/user/roles' },
+      {
+        title: '用户角色授权',
+        path: '/admin/user/authorization',
+        icon: 'UserFilled'
+      }
+    ]
   },
   {
     title: '课程管理',
@@ -64,13 +71,27 @@ export const teacherMenu = [
     path: '/teacher/resources',
     children: [
       { title: '作业管理', path: '/teacher/resources/assignments' },
-      { title: '成绩管理', path: '/teacher/resources/grades' }
+      { title: '成绩管理', path: '/teacher/resources/grades' },
+      {
+        title: '教学资料库',
+        path: '/teacher/resources/library',
+        icon: 'FolderOpened',
+        menuClass: 'teacher-resource-library-item'
+      }
     ]
   },
   {
     title: '考勤记录',
     path: '/teacher/attendance',
-    children: [{ title: '异常考勤', path: '/teacher/attendance/abnormal' }]
+    children: [
+      { title: '异常考勤', path: '/teacher/attendance/abnormal', icon: 'WarningFilled' },
+      {
+        title: '班级考勤批量处理',
+        path: '/teacher/attendance/batch-processing',
+        icon: 'Operation',
+        menuClass: 'teacher-attendance-batch-item'
+      }
+    ]
   },
   {
     title: '教学数据',
@@ -94,7 +115,19 @@ export const studentMenu = [
   {
     title: '我的作业',
     path: '/student/assignments',
-    children: [{ title: '考试成绩', path: '/student/assignments/exam-scores' }]
+    children: [
+      { title: '考试成绩', path: '/student/assignments/exam-scores' },
+      {
+        title: '作业提交记录',
+        path: '/student/assignments/submissions',
+        icon: 'DocumentChecked'
+      },
+      {
+        title: '学习资料库',
+        path: '/student/assignments/resources',
+        icon: 'FolderOpened'
+      }
+    ]
   },
   {
     title: '我的考勤',
@@ -112,4 +145,3 @@ export const studentMenu = [
     children: [{ title: '修改密码', path: '/student/profile/change-password' }]
   }
 ]
-

@@ -11,11 +11,13 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
 mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.edusmart.manager.entity
   configuration:
     map-underscore-to-camel-case: true
   global-config:
     db-config:
-      id-type: ASSIGN_ID
+      id-type: AUTO
 
 edu:
   security:

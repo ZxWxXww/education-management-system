@@ -1,5 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+
+const BILL_NOTICE_STORAGE_KEY = 'edu_bill_notifications'
 
 // 财单管理 mock 数据（后续接入真实接口时，可替换为 src/api/admin/bill.js）
 const filterForm = ref({
@@ -88,6 +90,18 @@ const billRows = ref([
   }
 ])
 
+const createDialogVisible = ref(false)
+const createForm = reactive({
+  studentName: '',
+  className: '',
+  billType: '课时包缴费',
+  amount: 0,
+  paidAmount: 0,
+  status: '待确认'
+})
+
+const createStatusOptions = ['待确认', '已完成', '已逾期', '已作废']
+
 const expectedPath = computed(() => buildPath(expectedSeries, 560, 210, 24))
 const receivedPath = computed(() => buildPath(receivedSeries, 560, 210, 24))
 
@@ -118,6 +132,91 @@ function getStatusType(status) {
 function formatCurrency(value) {
   return `¥ ${value.toLocaleString('zh-CN')}`
 }
+
+function openCreateDialog() {
+  createForm.studentName = ''
+  createForm.className = ''
+  createForm.billType = '课时包缴费'
+  createForm.amount = 0
+  createForm.paidAmount = 0
+  createForm.status = '待确认'
+  createDialogVisible.value = true
+}
+
+function nowDateTime() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ')
+}
+
+function buildBillNo() {
+  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const maxSeq = billRows.value.reduce((max, row) => {
+    if (!row.billNo || !row.billNo.startsWith(`BL${datePart}`)) return max
+    const seq = Number(row.billNo.slice(-3))
+    return Number.isNaN(seq) ? max : Math.max(max, seq)
+  }, 0)
+  return `BL${datePart}${String(maxSeq + 1).padStart(3, '0')}`
+}
+
+function saveNewBill() {
+  if (!createForm.studentName || !createForm.className || Number(createForm.amount) <= 0) return
+  const now = nowDateTime()
+  const billNo = buildBillNo()
+  const amount = Number(createForm.amount)
+  let paidAmount = Number(createForm.paidAmount)
+  if (createForm.status === '已完成') {
+    paidAmount = amount
+  }
+  if (paidAmount > amount) {
+    paidAmount = amount
+  }
+  if (paidAmount < 0) {
+    paidAmount = 0
+  }
+  billRows.value.unshift({
+    billNo,
+    studentName: createForm.studentName,
+    className: createForm.className,
+    billType: createForm.billType,
+    amount,
+    paidAmount,
+    status: createForm.status,
+    created_at: now,
+    updated_at: now
+  })
+  appendBillNotice({
+    noticeId: `BN-${Date.now()}`,
+    noticeType: 'bill',
+    title: `账单通知：${createForm.billType}`,
+    content: `管理员已为您创建账单 ${billNo}，请及时查看并完成支付。`,
+    billNo,
+    studentName: createForm.studentName,
+    className: createForm.className,
+    billType: createForm.billType,
+    amount,
+    paidAmount,
+    billStatus: createForm.status,
+    paymentStatus: createForm.status === '已完成' ? 'paid' : 'pending',
+    created_at: now,
+    updated_at: now
+  })
+  createDialogVisible.value = false
+}
+
+function getStoredNotices() {
+  try {
+    const raw = localStorage.getItem(BILL_NOTICE_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch (error) {
+    return []
+  }
+}
+
+function appendBillNotice(notice) {
+  const notices = getStoredNotices()
+  notices.unshift(notice)
+  localStorage.setItem(BILL_NOTICE_STORAGE_KEY, JSON.stringify(notices))
+}
 </script>
 
 <template>
@@ -129,7 +228,7 @@ function formatCurrency(value) {
       </div>
       <div class="bill-head-actions">
         <el-button size="large">导出财单</el-button>
-        <el-button type="primary" size="large">新建财单</el-button>
+        <el-button type="primary" size="large" @click="openCreateDialog">新建财单</el-button>
       </div>
     </section>
 
@@ -258,6 +357,50 @@ function formatCurrency(value) {
         <p class="summary-value summary-value--orange">{{ formatCurrency(totalPending) }}</p>
       </article>
     </section>
+
+    <el-dialog v-model="createDialogVisible" title="给用户添加账单" width="540px">
+      <el-form label-width="92px" class="create-bill-form">
+        <el-form-item label="学员姓名">
+          <el-input v-model="createForm.studentName" placeholder="请输入学员姓名" />
+        </el-form-item>
+        <el-form-item label="班级">
+          <el-input v-model="createForm.className" placeholder="请输入班级名称" />
+        </el-form-item>
+        <el-form-item label="账单类型">
+          <el-select v-model="createForm.billType" style="width: 100%">
+            <el-option
+              v-for="option in billTypeOptions.filter((item) => item !== '全部类型')"
+              :key="option"
+              :label="option"
+              :value="option"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="应收金额">
+          <el-input-number v-model="createForm.amount" :min="0" :step="100" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="实收金额">
+          <el-input-number v-model="createForm.paidAmount" :min="0" :step="100" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="createForm.status" style="width: 100%">
+            <el-option v-for="option in createStatusOptions" :key="option" :label="option" :value="option" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="createDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :disabled="!createForm.studentName || !createForm.className || Number(createForm.amount) <= 0"
+            @click="saveNewBill"
+          >
+            添加账单
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -609,6 +752,16 @@ function formatCurrency(value) {
 
 :global(html.dark) .receivable-item__track {
   background: #253044;
+}
+
+.create-bill-form {
+  padding-right: 6px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>
 

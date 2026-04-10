@@ -1,5 +1,5 @@
 <script setup>
-import { reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
@@ -26,6 +26,10 @@ const initialProfile = {
 }
 
 const profileForm = reactive({ ...initialProfile })
+const BILL_NOTICE_STORAGE_KEY = 'edu_bill_notifications'
+const billNotices = ref([])
+const billDialogVisible = ref(false)
+const currentBillNotice = ref(null)
 
 const subjectTags = ['数学拔高', '物理竞赛', '英语写作', '周测稳定']
 
@@ -36,6 +40,10 @@ const learningStats = [
   { label: '班级综合评级', value: 'A' }
 ]
 
+const unreadNoticeCount = computed(() =>
+  billNotices.value.filter((notice) => notice.paymentStatus !== 'paid').length
+)
+
 function handleReset() {
   Object.assign(profileForm, initialProfile)
   ElMessage.success('已恢复为初始资料')
@@ -45,6 +53,69 @@ function handleSave() {
   profileForm.updated_at = '2026-04-06 09:10:00'
   ElMessage.success('个人信息保存成功（Mock）')
 }
+
+function getStoredBillNotices() {
+  try {
+    const raw = localStorage.getItem(BILL_NOTICE_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch (error) {
+    return []
+  }
+}
+
+function loadBillNotices() {
+  const notices = getStoredBillNotices()
+  billNotices.value = notices.filter(
+    (item) => item.noticeType === 'bill' && item.studentName === profileForm.name
+  )
+}
+
+function statusTagType(status) {
+  if (status === '已完成') return 'success'
+  if (status === '已逾期') return 'danger'
+  if (status === '已作废') return 'info'
+  return 'warning'
+}
+
+function paymentTagType(status) {
+  return status === 'paid' ? 'success' : 'warning'
+}
+
+function paymentTagText(status) {
+  return status === 'paid' ? '已支付' : '待支付'
+}
+
+function openBillNotice(notice) {
+  currentBillNotice.value = { ...notice }
+  billDialogVisible.value = true
+}
+
+function mockPayBill() {
+  if (!currentBillNotice.value || currentBillNotice.value.paymentStatus === 'paid') return
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  const targetId = currentBillNotice.value.noticeId
+  const allNotices = getStoredBillNotices()
+  const next = allNotices.map((item) => {
+    if (item.noticeId !== targetId) return item
+    return {
+      ...item,
+      paymentStatus: 'paid',
+      billStatus: '已完成',
+      paidAmount: item.amount,
+      updated_at: now
+    }
+  })
+  localStorage.setItem(BILL_NOTICE_STORAGE_KEY, JSON.stringify(next))
+  loadBillNotices()
+  const updated = next.find((item) => item.noticeId === targetId)
+  currentBillNotice.value = updated ? { ...updated } : null
+  ElMessage.success('支付成功（模拟）')
+}
+
+onMounted(() => {
+  loadBillNotices()
+})
 
 const shellProps = {
   title: '个人信息',
@@ -138,12 +209,94 @@ const shellProps = {
           </div>
         </div>
 
+        <div class="notice-head">
+          <h3 class="section-title section-title--spaced">通知公告</h3>
+          <el-tag :type="unreadNoticeCount > 0 ? 'warning' : 'success'" effect="light">
+            未处理账单 {{ unreadNoticeCount }} 条
+          </el-tag>
+        </div>
+        <div v-if="billNotices.length > 0" class="notice-list">
+          <article v-for="notice in billNotices" :key="notice.noticeId" class="notice-item">
+            <div class="notice-main">
+              <p class="notice-title">{{ notice.title }}</p>
+              <p class="notice-content">{{ notice.content }}</p>
+              <p class="notice-meta">
+                财单号：{{ notice.billNo }} ｜ 类型：{{ notice.billType }} ｜ 金额：¥ {{ notice.amount.toLocaleString('zh-CN') }}
+              </p>
+            </div>
+            <div class="notice-actions">
+              <el-tag :type="paymentTagType(notice.paymentStatus)" effect="light">
+                {{ paymentTagText(notice.paymentStatus) }}
+              </el-tag>
+              <el-button type="primary" link @click="openBillNotice(notice)">查看账单</el-button>
+            </div>
+          </article>
+        </div>
+        <el-empty v-else description="暂无账单通知" :image-size="86" />
+
         <div class="action-row">
           <el-button @click="handleReset">重置</el-button>
           <el-button type="primary" @click="handleSave">保存信息</el-button>
         </div>
       </section>
     </div>
+
+    <el-dialog v-model="billDialogVisible" title="账单详情" width="520px">
+      <div v-if="currentBillNotice" class="bill-detail">
+        <div class="bill-row">
+          <span>财单号</span>
+          <strong>{{ currentBillNotice.billNo }}</strong>
+        </div>
+        <div class="bill-row">
+          <span>学员姓名</span>
+          <strong>{{ currentBillNotice.studentName }}</strong>
+        </div>
+        <div class="bill-row">
+          <span>班级</span>
+          <strong>{{ currentBillNotice.className }}</strong>
+        </div>
+        <div class="bill-row">
+          <span>账单类型</span>
+          <strong>{{ currentBillNotice.billType }}</strong>
+        </div>
+        <div class="bill-row">
+          <span>应收金额</span>
+          <strong>¥ {{ Number(currentBillNotice.amount || 0).toLocaleString('zh-CN') }}</strong>
+        </div>
+        <div class="bill-row">
+          <span>实收金额</span>
+          <strong>¥ {{ Number(currentBillNotice.paidAmount || 0).toLocaleString('zh-CN') }}</strong>
+        </div>
+        <div class="bill-row">
+          <span>账单状态</span>
+          <el-tag :type="statusTagType(currentBillNotice.billStatus)" effect="light">
+            {{ currentBillNotice.billStatus }}
+          </el-tag>
+        </div>
+        <div class="bill-row">
+          <span>支付状态</span>
+          <el-tag :type="paymentTagType(currentBillNotice.paymentStatus)" effect="light">
+            {{ paymentTagText(currentBillNotice.paymentStatus) }}
+          </el-tag>
+        </div>
+        <div class="bill-row">
+          <span>通知时间</span>
+          <strong>{{ currentBillNotice.created_at }}</strong>
+        </div>
+      </div>
+      <template #footer>
+        <div class="bill-footer">
+          <el-button @click="billDialogVisible = false">关闭</el-button>
+          <el-button
+            type="primary"
+            :disabled="!currentBillNotice || currentBillNotice.paymentStatus === 'paid'"
+            @click="mockPayBill"
+          >
+            模拟支付
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </component>
 </template>
 
@@ -302,6 +455,88 @@ const shellProps = {
   gap: 10px;
 }
 
+.notice-head {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notice-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.notice-main {
+  min-width: 0;
+}
+
+.notice-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.notice-content {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.notice-meta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.notice-actions {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.bill-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bill-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.bill-row strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.bill-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 @media (max-width: 980px) {
   .personal-info {
     grid-template-columns: 1fr;
@@ -325,7 +560,8 @@ const shellProps = {
 
 :global(html.dark) .profile-overview,
 :global(html.dark) .profile-form,
-:global(html.dark) .stat-item {
+:global(html.dark) .stat-item,
+:global(html.dark) .notice-item {
   background: #1a2028;
   border-color: #2b3442;
 }
@@ -337,14 +573,19 @@ const shellProps = {
 :global(html.dark) .profile-name,
 :global(html.dark) .meta-item strong,
 :global(html.dark) .section-title,
-:global(html.dark) .stat-item strong {
+:global(html.dark) .stat-item strong,
+:global(html.dark) .notice-title,
+:global(html.dark) .bill-row strong {
   color: #e5eaf3;
 }
 
 :global(html.dark) .profile-meta,
 :global(html.dark) .meta-item,
 :global(html.dark) .section-head .el-icon,
-:global(html.dark) .stat-item span {
+:global(html.dark) .stat-item span,
+:global(html.dark) .notice-content,
+:global(html.dark) .notice-meta,
+:global(html.dark) .bill-row {
   color: #9ba7ba;
 }
 
