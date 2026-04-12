@@ -1,68 +1,20 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { Calendar, Plus, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { fetchAdminAssignmentPage } from '../../api/admin/assignment'
 
-// 作业管理 mock 数据（后续接入真实接口时，可在 src/api/admin/assignment.js 中替换）
 const searchKeyword = ref('')
 const statusFilter = ref('全部状态')
 const courseFilter = ref('全部课程')
+const loading = ref(false)
 
 const statusOptions = ['全部状态', '未开始', '进行中', '已截止']
-const courseOptions = ['全部课程', '高一数学冲刺班', '高二英语提升班', 'Python 入门班', '前端工程化班']
+const assignmentList = ref([])
 
-const assignmentList = ref([
-  {
-    id: 'A-20260401',
-    title: '函数综合训练（第一章）',
-    course: '高一数学冲刺班',
-    className: '高一(1)班',
-    teacher: '王雪',
-    deadline: '2026-04-12 23:59',
-    status: '进行中',
-    submitted: 42,
-    total: 48,
-    created_at: '2026-04-01 09:20:10',
-    updated_at: '2026-04-06 10:36:25'
-  },
-  {
-    id: 'A-20260328',
-    title: '阅读理解专项（Unit 5）',
-    course: '高二英语提升班',
-    className: '高二(3)班',
-    teacher: '刘敏',
-    deadline: '2026-04-08 20:00',
-    status: '进行中',
-    submitted: 36,
-    total: 40,
-    created_at: '2026-03-28 14:02:31',
-    updated_at: '2026-04-05 16:12:03'
-  },
-  {
-    id: 'A-20260321',
-    title: '循环与列表综合作业',
-    course: 'Python 入门班',
-    className: '初级(2)班',
-    teacher: '周凯',
-    deadline: '2026-04-06 18:00',
-    status: '已截止',
-    submitted: 27,
-    total: 32,
-    created_at: '2026-03-21 11:33:07',
-    updated_at: '2026-04-06 18:15:19'
-  },
-  {
-    id: 'A-20260409',
-    title: 'Vue 组件通信练习',
-    course: '前端工程化班',
-    className: '前端(1)班',
-    teacher: '陈然',
-    deadline: '2026-04-18 22:00',
-    status: '未开始',
-    submitted: 0,
-    total: 35,
-    created_at: '2026-04-09 08:46:55',
-    updated_at: '2026-04-09 08:46:55'
-  }
+const courseOptions = computed(() => [
+  '全部课程',
+  ...new Set(assignmentList.value.map((item) => item.course).filter(Boolean))
 ])
 
 const filteredAssignments = computed(() =>
@@ -79,22 +31,23 @@ const filteredAssignments = computed(() =>
 )
 
 const stats = computed(() => {
-  const total = assignmentList.value.length
-  const running = assignmentList.value.filter((item) => item.status === '进行中').length
-  const closed = assignmentList.value.filter((item) => item.status === '已截止').length
+  const visibleAssignments = filteredAssignments.value
+  const total = visibleAssignments.length
+  const running = visibleAssignments.filter((item) => item.status === '进行中').length
+  const closed = visibleAssignments.filter((item) => item.status === '已截止').length
   const avgRate =
-    assignmentList.value.reduce((acc, item) => acc + Math.round((item.submitted / item.total) * 100), 0) / (total || 1)
+    visibleAssignments.reduce((acc, item) => acc + submitRate(item), 0) / (total || 1)
 
   return [
-    { label: '作业总数', value: `${total}`, trend: '+2' },
-    { label: '进行中', value: `${running}`, trend: '实时' },
-    { label: '已截止', value: `${closed}`, trend: '本周' },
-    { label: '平均提交率', value: `${Math.round(avgRate)}%`, trend: '全课程' }
+    { label: '当前筛选作业', value: `${total}`, trend: '按筛选条件统计' },
+    { label: '当前筛选进行中', value: `${running}`, trend: '按筛选条件统计' },
+    { label: '当前筛选已截止', value: `${closed}`, trend: '按筛选条件统计' },
+    { label: '平均提交率', value: `${Math.round(avgRate)}%`, trend: '按当前筛选作业计算' }
   ]
 })
 
 const deadlineBoard = computed(() =>
-  [...assignmentList.value]
+  [...filteredAssignments.value]
     .filter((item) => item.status !== '已截止')
     .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
     .slice(0, 3)
@@ -109,24 +62,33 @@ function statusTagType(status) {
   if (status === '已截止') return 'info'
   return 'warning'
 }
+
+async function loadAssignments() {
+  loading.value = true
+  try {
+    const page = await fetchAdminAssignmentPage({ pageNum: 1, pageSize: 200 })
+    assignmentList.value = page.list
+  } catch (error) {
+    ElMessage.error(error.message || '管理员作业列表加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadAssignments()
+})
 </script>
 
 <template>
-  <div class="assignment-management">
+  <div v-loading="loading" class="assignment-management">
     <section class="page-head">
       <div>
         <h1 class="page-title">作业管理</h1>
         <p class="page-subtitle">教学资源 / 作业管理</p>
       </div>
       <div class="head-actions">
-        <el-button class="action-btn" type="default">
-          <el-icon><Calendar /></el-icon>
-          <span>本月作业</span>
-        </el-button>
-        <el-button class="action-btn action-btn--primary" type="primary">
-          <el-icon><Plus /></el-icon>
-          <span>发布作业</span>
-        </el-button>
+        <el-tag type="info" effect="plain">仅展示真实作业监控数据</el-tag>
       </div>
     </section>
 
@@ -154,13 +116,9 @@ function statusTagType(status) {
           </el-select>
         </div>
         <div class="toolbar-right">
-          <el-button class="action-btn" type="default">
+          <el-button class="action-btn" type="default" @click="loadAssignments">
             <el-icon><Refresh /></el-icon>
             <span>刷新</span>
-          </el-button>
-          <el-button class="action-btn" type="default">
-            <el-icon><UploadFilled /></el-icon>
-            <span>导出</span>
           </el-button>
         </div>
       </header>
@@ -187,8 +145,8 @@ function statusTagType(status) {
               </template>
             </el-table-column>
             <el-table-column prop="deadline" label="截止时间" min-width="160" />
-            <el-table-column prop="created_at" label="created_at" min-width="170" />
-            <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+            <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+            <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
           </el-table>
         </article>
 
@@ -203,8 +161,8 @@ function statusTagType(status) {
             </div>
           </article>
           <article class="mini-card">
-            <h3>接口切换说明</h3>
-            <p>当前为 mock 数据。接入真实接口时，将 assignmentList 替换为 src/api/admin/assignment.js 请求结果。</p>
+            <h3>真实数据说明</h3>
+            <p>当前页面已切换为管理员真实作业聚合视图，提交进度由班级学生数与提交记录实时计算。</p>
           </article>
         </aside>
       </div>

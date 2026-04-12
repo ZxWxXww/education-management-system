@@ -1,11 +1,14 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
+import { login } from '../../api/auth'
 import { Avatar, Lock, School, User } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const loading = ref(false)
 
 const loginForm = ref({
   username: '',
@@ -25,20 +28,37 @@ const roleHomePathMap = {
   student: '/student/learning-center'
 }
 
-function handleLogin() {
-  // Mock 登录逻辑（切换真实后端时，请替换为 src/api/auth.js）
-  userStore.setRole(loginForm.value.role)
-  userStore.setToken('mock-token-' + Date.now())
-  
-  // 跳转到对应角色首页
-  router.push(roleHomePathMap[loginForm.value.role])
+async function handleLogin() {
+  if (!loginForm.value.username.trim()) {
+    ElMessage.warning('请输入用户名')
+    return
+  }
+  if (!loginForm.value.password) {
+    ElMessage.warning('请输入密码')
+    return
+  }
+
+  loading.value = true
+  try {
+    const loginData = await login({
+      username: loginForm.value.username.trim(),
+      password: loginForm.value.password,
+      role: loginForm.value.role
+    })
+
+    userStore.setLoginInfo(loginData)
+    ElMessage.success('登录成功')
+    router.push(roleHomePathMap[userStore.role] || '/login')
+  } catch (error) {
+    ElMessage.error(error.message || '登录失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 function quickLogin(role) {
   loginForm.value.role = role
-  loginForm.value.username = role
-  loginForm.value.password = '123456'
-  handleLogin()
+  ElMessage.info('已切换登录角色，请输入真实账号和密码')
 }
 </script>
 
@@ -94,7 +114,7 @@ function quickLogin(role) {
             size="large"
             class="login-button"
             native-type="submit"
-            :loading="false"
+            :loading="loading"
           >
             登录
           </el-button>
@@ -102,7 +122,7 @@ function quickLogin(role) {
       </el-form>
 
       <div class="quick-login">
-        <p class="quick-login-title">快速体验（Mock 数据）</p>
+        <p class="quick-login-title">快速选择角色</p>
         <div class="quick-login-buttons">
           <el-button
             v-for="role in roleOptions"

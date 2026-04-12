@@ -1,0 +1,323 @@
+# 教培智管系统 Skills 配置
+# EduSmart Manager Skills Configuration
+
+# 核心技能定义
+core_skills:
+  # 系统管理技能
+  system_management:
+    name: "system-management"
+    display_name: "系统管理"
+    description: "教培系统核心管理功能"
+    category: "administration"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "用户管理"
+      - "角色权限管理" 
+      - "系统配置"
+      - "日志管理"
+      - "数据备份"
+    
+    commands:
+      - name: "user_list"
+        description: "获取用户列表"
+        endpoint: "/api/admin/users"
+        method: "GET"
+        
+      - name: "role_create"
+        description: "创建角色"
+        endpoint: "/api/admin/roles"
+        method: "POST"
+        
+      - name: "permission_assign"
+        description: "分配权限"
+        endpoint: "/api/admin/permissions"
+        method: "PUT"
+
+  # 教学管理技能
+  teaching_management:
+    name: "teaching-management"
+    display_name: "教学管理"
+    description: "教学内容和学习资源管理"
+    category: "education"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "课程管理"
+      - "作业管理"
+      - "成绩管理"
+      - "教学资源管理"
+      - "考试安排"
+    
+    commands:
+      - name: "course_create"
+        description: "创建课程"
+        endpoint: "/api/teacher/courses"
+        method: "POST"
+        
+      - name: "assignment_publish"
+        description: "发布作业"
+        endpoint: "/api/teacher/assignments"
+        method: "POST"
+        
+      - name: "grade_input"
+        description: "录入成绩"
+        endpoint: "/api/teacher/grades"
+        method: "POST"
+
+  # 学生服务技能
+  student_services:
+    name: "student-services"
+    display_name: "学生服务"
+    description: "学生学习和服务功能"
+    category: "student"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "课程查看"
+      - "作业提交"
+      - "成绩查询"
+      - "考勤记录"
+      - "学习分析"
+    
+    commands:
+      - name: "course_enroll"
+        description: "课程报名"
+        endpoint: "/api/student/courses/enroll"
+        method: "POST"
+        
+      - name: "assignment_submit"
+        description: "提交作业"
+        endpoint: "/api/student/assignments/submit"
+        method: "POST"
+        
+      - name: "grade_query"
+        description: "查询成绩"
+        endpoint: "/api/student/grades"
+        method: "GET"
+
+  # 考勤管理技能
+  attendance_management:
+    name: "attendance-management"
+    display_name: "考勤管理"
+    description: "学生和教师考勤记录管理"
+    category: "attendance"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "打卡签到"
+      - "考勤统计"
+      - "异常处理"
+      - "请假管理"
+      - "考勤报表"
+    
+    commands:
+      - name: "check_in"
+        description: "签到打卡"
+        endpoint: "/api/attendance/checkin"
+        method: "POST"
+        
+      - name: "attendance_stats"
+        description: "考勤统计"
+        endpoint: "/api/attendance/stats"
+        method: "GET"
+        
+      - name: "leave_apply"
+        description: "请假申请"
+        endpoint: "/api/attendance/leave"
+        method: "POST"
+
+  # 财务管理技能
+  financial_management:
+    name: "financial-management"
+    display_name: "财务管理"
+    description: "学费管理和财务报表"
+    category: "finance"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "学费收取"
+      - "账单管理"
+      - "财务报表"
+      - "课时扣减"
+      - "退款处理"
+    
+    commands:
+      - name: "payment_process"
+        description: "处理付款"
+        endpoint: "/api/finance/payments"
+        method: "POST"
+        
+      - name: "bill_generate"
+        description: "生成账单"
+        endpoint: "/api/finance/bills"
+        method: "POST"
+        
+      - name: "financial_report"
+        description: "财务报表"
+        endpoint: "/api/finance/reports"
+        method: "GET"
+
+# 辅助技能定义
+utility_skills:
+  # 数据分析技能
+  data_analysis:
+    name: "data-analysis"
+    display_name: "数据分析"
+    description: "教学数据分析和可视化"
+    category: "analytics"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "成绩分析"
+      - "学习趋势"
+      - "考勤分析"
+      - "财务分析"
+      - "报表生成"
+
+  # 通知推送技能
+  notification_service:
+    name: "notification-service"
+    display_name: "通知服务"
+    description: "系统消息和通知推送"
+    category: "communication"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "消息推送"
+      - "邮件通知"
+      - "短信通知"
+      - "站内信"
+      - "公告发布"
+
+  # 文件管理技能
+  file_management:
+    name: "file-management"
+    display_name: "文件管理"
+    description: "教学资源和文件管理"
+    category: "storage"
+    version: "1.0.0"
+    enabled: true
+    
+    capabilities:
+      - "文件上传"
+      - "文件下载"
+      - "图片处理"
+      - "文档预览"
+      - "资源分类"
+
+# 技能权限配置
+skill_permissions:
+  # 管理员权限
+  admin:
+    skills:
+      - "system-management"
+      - "teaching-management"
+      - "student-services"
+      - "attendance-management"
+      - "financial-management"
+      - "data-analysis"
+      - "notification-service"
+      - "file-management"
+    
+  # 教师权限
+  teacher:
+    skills:
+      - "teaching-management"
+      - "student-services"
+      - "attendance-management"
+      - "data-analysis"
+      - "notification-service"
+      - "file-management"
+    
+  # 学生权限
+  student:
+    skills:
+      - "student-services"
+      - "attendance-management"
+      - "notification-service"
+      - "file-management"
+
+# 技能触发器配置
+skill_triggers:
+  # 自动触发器
+  auto_triggers:
+    - name: "daily_attendance_reminder"
+      description: "每日考勤提醒"
+      trigger: "cron"
+      schedule: "0 8 * * *"  # 每天8点
+      skill: "notification-service"
+      action: "send_attendance_reminder"
+      
+    - name: "weekly_report_generation"
+      description: "周报自动生成"
+      trigger: "cron"
+      schedule: "0 9 * * 1"  # 每周一9点
+      skill: "data-analysis"
+      action: "generate_weekly_report"
+      
+    - name: "assignment_deadline_reminder"
+      description: "作业截止提醒"
+      trigger: "time_before"
+      time_config:
+        before_deadline: "24h"  # 截止前24小时
+      skill: "notification-service"
+      action: "send_deadline_reminder"
+
+  # 手动触发器
+  manual_triggers:
+    - name: "emergency_notification"
+      description: "紧急通知"
+      trigger: "manual"
+      skill: "notification-service"
+      action: "send_emergency_alert"
+      
+    - name: "data_backup"
+      description: "数据备份"
+      trigger: "manual"
+      skill: "system-management"
+      action: "perform_data_backup"
+
+# 技能扩展配置
+skill_extensions:
+  # AI 扩展（可选）
+  ai_extensions:
+    enabled: false
+    provider: "openai"  # 或 "anthropic", "local"
+    api_key: "YOUR_AI_API_KEY"
+    
+    ai_skills:
+      - name: "intelligent_grading"
+        description: "智能批改作业"
+        base_skill: "teaching-management"
+        
+      - name: "learning_path_recommendation"
+        description: "学习路径推荐"
+        base_skill: "student-services"
+        
+      - name: "smart_qa"
+        description: "智能问答"
+        base_skill: "notification-service"
+
+  # 第三方集成扩展
+  third_party_extensions:
+    enabled: false
+    integrations:
+      - name: "wechat_integration"
+        description: "微信集成"
+        type: "messaging"
+        
+      - name: "alipay_integration"
+        description: "支付宝集成"
+        type: "payment"
+        
+      - name: "dingtalk_integration"
+        description: "钉钉集成"
+        type: "messaging"

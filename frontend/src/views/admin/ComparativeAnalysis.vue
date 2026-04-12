@@ -1,120 +1,49 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { fetchAdminComparativeAnalysis } from '../../api/admin/report'
 
-// 对比分析页 mock 数据（后续接入真实接口时，可替换为 src/api/admin/report.js）
 const queryForm = ref({
   campus: '全部校区',
   compareType: '班级对比',
-  period: '近30天',
-  dateRange: ['2026-03-10', '2026-04-08']
+  period: '当前全量数据'
 })
 
-const campusOptions = ['全部校区', '东城校区', '南山校区', '北辰校区']
-const compareTypeOptions = ['班级对比', '学科对比', '教师对比']
-const periodOptions = ['近7天', '近30天', '近90天']
+const loading = ref(false)
+const campusOptions = ['全部校区']
+const compareTypeOptions = ['班级对比', '课程对比', '教师对比']
+const periodOptions = ['当前全量数据']
 
-const kpiCards = [
-  { label: '课程完课率均值', value: '92.6%', delta: '+3.1%', tone: 'blue' },
-  { label: '作业按时提交率', value: '89.4%', delta: '+1.8%', tone: 'green' },
-  { label: '平均提分幅度', value: '+11.2 分', delta: '+2.4%', tone: 'purple' },
-  { label: '异常考勤占比', value: '4.7%', delta: '-0.9%', tone: 'orange' }
-]
+const kpiCards = ref([])
+const compareLabels = ref([])
+const courseSeries = ref([])
+const homeworkSeries = ref([])
+const scoreTrendLabels = ref([])
+const scoreSeriesA = ref([])
+const scoreSeriesB = ref([])
+const compareRows = ref([])
+const insightCards = ref([])
 
-const compareLabels = ['高一数学A1', '高二英语B3', '初三物理冲刺', '高三化学提升', '高一语文强化']
-const courseSeries = [93, 89, 95, 90, 87]
-const homeworkSeries = [91, 84, 93, 88, 86]
-
-const scoreTrendLabels = ['第1周', '第2周', '第3周', '第4周', '第5周', '第6周']
-const scoreSeriesA = [72, 74, 75, 77, 79, 82]
-const scoreSeriesB = [68, 69, 70, 72, 73, 75]
-
-const compareRows = [
-  {
-    rank: 1,
-    target: '初三物理冲刺班',
-    completionRate: 95.2,
-    homeworkRate: 93.4,
-    scoreGrowth: 13.6,
-    abnormalRate: 3.2,
-    created_at: '2026-04-08 09:18:35',
-    updated_at: '2026-04-08 11:46:52'
-  },
-  {
-    rank: 2,
-    target: '高一数学A1班',
-    completionRate: 93.1,
-    homeworkRate: 91.2,
-    scoreGrowth: 12.4,
-    abnormalRate: 4.1,
-    created_at: '2026-04-08 09:20:08',
-    updated_at: '2026-04-08 11:46:52'
-  },
-  {
-    rank: 3,
-    target: '高三化学提升班',
-    completionRate: 90.3,
-    homeworkRate: 88.8,
-    scoreGrowth: 10.7,
-    abnormalRate: 4.8,
-    created_at: '2026-04-08 09:21:26',
-    updated_at: '2026-04-08 11:46:52'
-  },
-  {
-    rank: 4,
-    target: '高二英语B3班',
-    completionRate: 88.9,
-    homeworkRate: 84.5,
-    scoreGrowth: 8.9,
-    abnormalRate: 5.6,
-    created_at: '2026-04-08 09:22:57',
-    updated_at: '2026-04-08 11:46:52'
-  },
-  {
-    rank: 5,
-    target: '高一语文强化班',
-    completionRate: 87.4,
-    homeworkRate: 86.1,
-    scoreGrowth: 7.8,
-    abnormalRate: 6.0,
-    created_at: '2026-04-08 09:23:51',
-    updated_at: '2026-04-08 11:46:52'
-  }
-]
-
-const insightCards = [
-  {
-    title: '高贡献班级',
-    content: '初三物理冲刺班在“完课率 + 作业提交率 + 提分”三项均位于第一梯队。'
-  },
-  {
-    title: '需重点跟进',
-    content: '高二英语B3班作业按时提交率偏低，建议优化作业提醒与课后答疑机制。'
-  },
-  {
-    title: '风险提醒',
-    content: '高一语文强化班异常考勤占比连续两周高于 5%，需排查到课时段与授课节奏。'
-  }
-]
-
-const scorePathA = computed(() => buildLinePath(scoreSeriesA, 560, 210, 28))
-const scorePathB = computed(() => buildLinePath(scoreSeriesB, 560, 210, 28))
+const scorePathA = computed(() => buildLinePath(scoreSeriesA.value, 560, 210, 28))
+const scorePathB = computed(() => buildLinePath(scoreSeriesB.value, 560, 210, 28))
 
 function buildLinePath(points, width, height, padding) {
+  if (!points.length) return ''
   const max = Math.max(...points)
   const min = Math.min(...points)
   const span = max - min || 1
   return points
     .map((value, index) => {
-      const x = (index / (points.length - 1)) * width
+      const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width
       const y = height - ((value - min) / span) * (height - padding * 2) - padding
       return `${x.toFixed(2)},${y.toFixed(2)}`
     })
     .join(' ')
 }
 
-function getScoreType(scoreGrowth) {
-  if (scoreGrowth >= 12) return 'success'
-  if (scoreGrowth >= 9) return 'warning'
+function getScoreType(score) {
+  if (score >= 90) return 'success'
+  if (score >= 75) return 'warning'
   return 'info'
 }
 
@@ -123,40 +52,66 @@ function getAbnormalType(rate) {
   if (rate >= 4.5) return 'warning'
   return 'success'
 }
+
+async function loadAnalysis() {
+  loading.value = true
+  try {
+    const data = await fetchAdminComparativeAnalysis(queryForm.value.compareType)
+    kpiCards.value = data.kpiCards
+    compareLabels.value = data.compareLabels
+    courseSeries.value = data.courseSeries
+    homeworkSeries.value = data.homeworkSeries
+    scoreTrendLabels.value = data.scoreTrendLabels
+    scoreSeriesA.value = data.scoreSeriesA
+    scoreSeriesB.value = data.scoreSeriesB
+    compareRows.value = data.compareRows
+    insightCards.value = data.insightCards
+  } catch (error) {
+    ElMessage.error(error.message || '对比分析加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function resetQuery() {
+  queryForm.value = {
+    campus: '全部校区',
+    compareType: '班级对比',
+    period: '当前全量数据'
+  }
+  loadAnalysis()
+}
+
+onMounted(() => {
+  loadAnalysis()
+})
 </script>
 
 <template>
-  <div class="analysis-page">
+  <div v-loading="loading" class="analysis-page">
     <section class="analysis-head">
       <div>
         <h1 class="analysis-title">对比分析</h1>
         <p class="analysis-subtitle">管理员端 / 数据报表 / 对比分析</p>
       </div>
       <div class="analysis-actions">
-        <el-button size="large">导出分析</el-button>
-        <el-button type="primary" size="large">生成简报</el-button>
+        <el-tag type="info" effect="plain">实时聚合视图</el-tag>
       </div>
     </section>
 
     <section class="filter-panel">
-      <el-select v-model="queryForm.campus">
+      <el-select v-model="queryForm.campus" disabled>
         <el-option v-for="option in campusOptions" :key="option" :label="option" :value="option" />
       </el-select>
       <el-select v-model="queryForm.compareType">
         <el-option v-for="option in compareTypeOptions" :key="option" :label="option" :value="option" />
       </el-select>
-      <el-select v-model="queryForm.period">
+      <el-select v-model="queryForm.period" disabled>
         <el-option v-for="option in periodOptions" :key="option" :label="option" :value="option" />
       </el-select>
-      <el-date-picker
-        v-model="queryForm.dateRange"
-        type="daterange"
-        value-format="YYYY-MM-DD"
-        start-placeholder="开始日期"
-        end-placeholder="结束日期"
-      />
-      <el-button type="primary">查询</el-button>
-      <el-button>重置</el-button>
+      <el-input value="当前按已打通真实数据全量聚合" readonly />
+      <el-button type="primary" @click="loadAnalysis">查询</el-button>
+      <el-button @click="resetQuery">重置</el-button>
     </section>
 
     <section class="kpi-grid">
@@ -172,8 +127,8 @@ function getAbnormalType(rate) {
     <section class="panel-grid">
       <article class="panel panel--bars">
         <header class="panel-head">
-          <h2>班级表现对比</h2>
-          <el-tag round effect="plain">完课率 / 作业率</el-tag>
+          <h2>对象表现对比</h2>
+          <el-tag round effect="plain">到课率 / 作业提交率</el-tag>
         </header>
         <div class="bar-list">
           <div v-for="(label, idx) in compareLabels" :key="label" class="bar-item">
@@ -204,10 +159,10 @@ function getAbnormalType(rate) {
 
     <section class="panel">
       <header class="panel-head">
-        <h2>6周提分趋势对比</h2>
+        <h2>平均成绩对比曲线</h2>
         <div class="legend-group">
-          <span><i class="dot dot--blue"></i>高绩效班级均分</span>
-          <span><i class="dot dot--purple"></i>全体班级均分</span>
+          <span><i class="dot dot--blue"></i>对象均分</span>
+          <span><i class="dot dot--purple"></i>整体均分</span>
         </div>
       </header>
       <div class="line-chart">
@@ -218,9 +173,9 @@ function getAbnormalType(rate) {
               <stop offset="100%" stop-color="#2563eb" stop-opacity="0" />
             </linearGradient>
           </defs>
-          <polygon :points="`0,214 ${scorePathA} 560,214`" fill="url(#scoreFillA)" />
-          <polyline :points="scorePathA" fill="none" stroke="#2563eb" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
-          <polyline :points="scorePathB" fill="none" stroke="#7c3aed" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+          <polygon v-if="scorePathA" :points="`0,214 ${scorePathA} 560,214`" fill="url(#scoreFillA)" />
+          <polyline v-if="scorePathA" :points="scorePathA" fill="none" stroke="#2563eb" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+          <polyline v-if="scorePathB" :points="scorePathB" fill="none" stroke="#7c3aed" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
         </svg>
         <div class="line-chart-axis">
           <span v-for="label in scoreTrendLabels" :key="label">{{ label }}</span>
@@ -234,10 +189,10 @@ function getAbnormalType(rate) {
       </header>
       <el-table :data="compareRows" stripe>
         <el-table-column prop="rank" label="排名" width="72" />
-        <el-table-column prop="target" label="班级" min-width="180" />
-        <el-table-column label="完课率" width="112">
+        <el-table-column prop="target" label="对象" min-width="180" />
+        <el-table-column label="到课率" width="112">
           <template #default="{ row }">
-            {{ row.completionRate }}%
+            {{ row.attendanceRate }}%
           </template>
         </el-table-column>
         <el-table-column label="作业提交率" width="128">
@@ -245,9 +200,9 @@ function getAbnormalType(rate) {
             {{ row.homeworkRate }}%
           </template>
         </el-table-column>
-        <el-table-column label="提分幅度" width="112">
+        <el-table-column label="平均成绩" width="112">
           <template #default="{ row }">
-            <el-tag :type="getScoreType(row.scoreGrowth)" effect="light">+{{ row.scoreGrowth }}分</el-tag>
+            <el-tag :type="getScoreType(row.averageScore)" effect="light">{{ row.averageScore }}分</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="异常考勤占比" width="132">
@@ -255,13 +210,12 @@ function getAbnormalType(rate) {
             <el-tag :type="getAbnormalType(row.abnormalRate)" effect="light">{{ row.abnormalRate }}%</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="created_at" min-width="170" />
-        <el-table-column prop="updated_at" label="updated_at" min-width="170" />
-        <el-table-column label="操作" width="140" fixed="right">
-          <template #default>
-            <el-button link type="primary">查看详情</el-button>
+        <el-table-column label="综合得分" width="112">
+          <template #default="{ row }">
+            {{ row.compositeScore }}
           </template>
         </el-table-column>
+        <el-table-column prop="teacherName" label="教师" min-width="120" />
       </el-table>
     </section>
   </div>
@@ -520,7 +474,7 @@ function getAbnormalType(rate) {
   bottom: 8px;
   padding: 0 12px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   color: #6b7280;
   font-size: 11px;
 }
@@ -549,8 +503,8 @@ function getAbnormalType(rate) {
     width: 100%;
   }
 
-  .analysis-actions :deep(.el-button) {
-    flex: 1;
+  .analysis-actions :deep(.el-tag) {
+    width: fit-content;
   }
 
   .kpi-grid,

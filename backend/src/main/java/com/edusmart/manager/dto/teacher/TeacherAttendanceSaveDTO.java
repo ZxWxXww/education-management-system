@@ -11,7 +11,6 @@ public class TeacherAttendanceSaveDTO {
     private Long sessionId;
     @NotNull(message = "学生ID不能为空")
     private Long studentId;
-    @NotNull(message = "教师ID不能为空")
     private Long teacherId;
     @NotNull(message = "考勤日期不能为空")
     private LocalDate attendanceDate;

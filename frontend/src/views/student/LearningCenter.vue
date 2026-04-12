@@ -1,71 +1,54 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Calendar, CollectionTag, DataLine, Notebook, Warning } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import PageShell from '../../components/PageShell.vue'
+import { fetchCurrentStudentProfile } from '../../api/student/profile'
+import { fetchStudentCoursePage } from '../../api/student/course'
+import { fetchStudentAssignmentSubmissionPage } from '../../api/student/assignment'
+import { fetchStudentNotificationPage } from '../../api/student/notification'
+import { fetchStudentAttendanceExceptionPage } from '../../api/student/attendance'
+import { fetchStudentScorePage } from '../../api/student/score'
 
-// 学生学习中心 Mock 数据（切换真实后端时，请替换为 src/api/student/learningCenter.js 的接口返回）
-const learningCenterMock = ref({
-  profile: {
-    studentNo: 'S20260318',
-    name: '李明',
-    grade: '高二（3）班',
-    advisor: '张老师',
-    created_at: '2026-02-18 09:20:00',
-    updated_at: '2026-04-06 08:30:00'
-  },
-  summary: {
-    weekCourseCount: 18,
-    pendingAssignmentCount: 4,
-    attendanceRate: 98.6,
-    averageScore: 89.5,
-    created_at: '2026-04-06 08:30:00',
-    updated_at: '2026-04-06 08:30:00'
-  },
-  todayCourses: [
-    { id: 1, timeRange: '08:00 - 09:40', courseName: '数学', teacher: '王老师', classroom: 'B-302', status: '进行中', created_at: '2026-04-06 08:00:00', updated_at: '2026-04-06 08:30:00' },
-    { id: 2, timeRange: '10:10 - 11:50', courseName: '英语', teacher: '刘老师', classroom: 'A-203', status: '待开始', created_at: '2026-04-06 10:10:00', updated_at: '2026-04-06 08:30:00' },
-    { id: 3, timeRange: '14:00 - 15:40', courseName: '物理', teacher: '陈老师', classroom: '实验楼-101', status: '待开始', created_at: '2026-04-06 14:00:00', updated_at: '2026-04-06 08:30:00' }
-  ],
-  assignments: [
-    { id: 1, title: '数学函数专题练习', courseName: '数学', deadline: '2026-04-07 22:00', progress: 60, status: '进行中', created_at: '2026-04-05 18:20:00', updated_at: '2026-04-06 07:55:00' },
-    { id: 2, title: '英语阅读理解（Unit 8）', courseName: '英语', deadline: '2026-04-08 21:00', progress: 35, status: '进行中', created_at: '2026-04-05 19:00:00', updated_at: '2026-04-06 08:15:00' },
-    { id: 3, title: '物理电学实验报告', courseName: '物理', deadline: '2026-04-09 20:00', progress: 85, status: '即将完成', created_at: '2026-04-04 21:30:00', updated_at: '2026-04-06 08:10:00' }
-  ],
-  notices: [
-    { id: 1, level: '重要', title: '月考安排通知', content: '本周五进行月考，请提前 15 分钟到考场。', publishTime: '2026-04-05 16:30', created_at: '2026-04-05 16:30:00', updated_at: '2026-04-05 16:30:00' },
-    { id: 2, level: '普通', title: '英语角活动', content: '周三 17:30 在图书馆二层举办英语角交流。', publishTime: '2026-04-04 12:00', created_at: '2026-04-04 12:00:00', updated_at: '2026-04-04 12:00:00' }
-  ],
-  attendanceAlerts: [
-    { id: 1, date: '2026-03-29', courseName: '化学', type: '迟到', comment: '入班时间 08:12', created_at: '2026-03-29 08:20:00', updated_at: '2026-03-29 08:20:00' }
-  ]
+const profile = ref({
+  studentNo: '-',
+  name: '同学',
+  grade: '-',
+  updatedAt: '-'
 })
+const courseRows = ref([])
+const assignmentRows = ref([])
+const noticeRows = ref([])
+const attendanceRows = ref([])
+const scoreRows = ref([])
+const loadingCourses = ref(false)
 
 const summaryCards = computed(() => [
   {
     key: 'weekCourseCount',
-    title: '本周课程数',
-    value: `${learningCenterMock.value.summary.weekCourseCount} 节`,
+    title: '课程总数',
+    value: `${courseRows.value.length} 节`,
     icon: Notebook,
     tone: 'blue'
   },
   {
     key: 'pendingAssignmentCount',
     title: '待完成作业',
-    value: `${learningCenterMock.value.summary.pendingAssignmentCount} 项`,
+    value: `${assignmentRows.value.filter((item) => item.status === 'pending').length} 项`,
     icon: CollectionTag,
     tone: 'orange'
   },
   {
-    key: 'attendanceRate',
-    title: '本月出勤率',
-    value: `${learningCenterMock.value.summary.attendanceRate}%`,
+    key: 'attendanceAlertCount',
+    title: '考勤异常',
+    value: `${attendanceRows.value.length} 条`,
     icon: Calendar,
     tone: 'green'
   },
   {
     key: 'averageScore',
     title: '阶段均分',
-    value: `${learningCenterMock.value.summary.averageScore}`,
+    value: `${scoreRows.value.length ? (scoreRows.value.reduce((sum, item) => sum + Number(item.score || 0), 0) / scoreRows.value.length).toFixed(1) : '0.0'}`,
     icon: DataLine,
     tone: 'purple'
   }
@@ -80,6 +63,65 @@ function getAssignmentStatusType(status) {
 function getNoticeType(level) {
   return level === '重要' ? 'danger' : 'info'
 }
+
+async function loadCourseModule() {
+  loadingCourses.value = true
+  try {
+    const [profileData, coursePage, assignmentPage, noticePage, attendancePage, scorePage] = await Promise.all([
+      fetchCurrentStudentProfile(),
+      fetchStudentCoursePage({ pageNum: 1, pageSize: 10 }),
+      fetchStudentAssignmentSubmissionPage({ pageNum: 1, pageSize: 10 }),
+      fetchStudentNotificationPage({ pageNum: 1, pageSize: 10 }),
+      fetchStudentAttendanceExceptionPage({ pageNum: 1, pageSize: 10 }),
+      fetchStudentScorePage({ pageNum: 1, pageSize: 20 })
+    ])
+    profile.value = {
+      studentNo: profileData.studentNo || '-',
+      name: profileData.name || '同学',
+      grade: profileData.className || '-',
+      updatedAt: profileData.updatedAt || '-'
+    }
+    courseRows.value = coursePage.list.map((item) => ({
+      id: item.id,
+      timeRange: item.nextLessonTime || item.schedule || '暂无后续排课',
+      courseName: item.courseName || '-',
+      teacher: item.teacherName || '-',
+      className: item.className || '-',
+      status: item.progress > 0 && item.progress < 100 ? '学习中' : item.progress >= 100 ? '已结课' : '待上课'
+    }))
+    assignmentRows.value = assignmentPage.list.map((item) => ({
+      id: item.id,
+      title: item.assignmentTitle,
+      courseName: item.courseName,
+      deadline: item.dueTime,
+      progress: item.status === 'submitted' ? 100 : item.status === 'late' ? 90 : item.status === 'pending' ? 30 : 60,
+      status: item.status === 'submitted' ? '已提交' : item.status === 'late' ? '逾期提交' : '进行中'
+    }))
+    noticeRows.value = noticePage.list.map((item) => ({
+      id: item.id,
+      level: item.noticeType || '普通',
+      title: item.title,
+      content: item.content,
+      publishTime: item.publishTime
+    }))
+    attendanceRows.value = attendancePage.list.map((item) => ({
+      id: item.rawId || item.id,
+      date: item.date,
+      courseName: item.courseName,
+      type: item.abnormalType,
+      comment: item.handleNote || item.reason || '-'
+    }))
+    scoreRows.value = scorePage.list
+  } catch (error) {
+    ElMessage.error(error.message || '学习中心数据加载失败')
+  } finally {
+    loadingCourses.value = false
+  }
+}
+
+onMounted(() => {
+  loadCourseModule()
+})
 </script>
 
 <template>
@@ -87,14 +129,14 @@ function getNoticeType(level) {
     <div class="learning-center-page">
       <el-row :gutter="16">
         <el-col :xs="24" :sm="24" :md="24" :lg="24" :xl="24">
-          <el-card shadow="never" class="profile-card">
+          <el-card v-loading="loadingCourses" shadow="never" class="profile-card">
             <div class="profile-main">
-              <div class="profile-title">欢迎回来，{{ learningCenterMock.profile.name }}</div>
+              <div class="profile-title">欢迎回来，{{ profile.name }}</div>
               <div class="profile-subtitle">
-                学号：{{ learningCenterMock.profile.studentNo }} ｜ 班级：{{ learningCenterMock.profile.grade }} ｜ 班主任：{{ learningCenterMock.profile.advisor }}
+                学号：{{ profile.studentNo }} ｜ 班级：{{ profile.grade }}
               </div>
             </div>
-            <div class="profile-time">最近更新时间：{{ learningCenterMock.profile.updated_at }}</div>
+            <div class="profile-time">最近更新时间：{{ profile.updatedAt }}</div>
           </el-card>
         </el-col>
       </el-row>
@@ -113,23 +155,23 @@ function getNoticeType(level) {
 
       <el-row :gutter="16" class="section-gap">
         <el-col :xs="24" :sm="24" :md="24" :lg="14" :xl="14">
-          <el-card shadow="never" class="panel-card">
+          <el-card v-loading="loadingCourses" shadow="never" class="panel-card">
             <template #header>
               <div class="panel-header">今日课程安排</div>
             </template>
             <el-timeline>
               <el-timeline-item
-                v-for="course in learningCenterMock.todayCourses"
+                v-for="course in courseRows"
                 :key="course.id"
                 :timestamp="course.timeRange"
                 :type="course.status === '进行中' ? 'primary' : 'info'"
                 placement="top"
               >
                 <div class="timeline-main">
-                  <div class="timeline-title">{{ course.courseName }} · {{ course.classroom }}</div>
+                  <div class="timeline-title">{{ course.courseName }} · {{ course.className }}</div>
                   <div class="timeline-meta">授课教师：{{ course.teacher }}</div>
                 </div>
-                <el-tag size="small" :type="course.status === '进行中' ? 'success' : 'info'">{{ course.status }}</el-tag>
+                <el-tag size="small" :type="course.status === '学习中' ? 'success' : 'info'">{{ course.status }}</el-tag>
               </el-timeline-item>
             </el-timeline>
           </el-card>
@@ -143,9 +185,9 @@ function getNoticeType(level) {
                 <el-icon><Warning /></el-icon>
               </div>
             </template>
-            <el-empty v-if="learningCenterMock.attendanceAlerts.length === 0" description="暂无考勤异常" :image-size="84" />
+            <el-empty v-if="attendanceRows.length === 0" description="暂无考勤异常" :image-size="84" />
             <div v-else class="attendance-list">
-              <div v-for="item in learningCenterMock.attendanceAlerts" :key="item.id" class="attendance-item">
+              <div v-for="item in attendanceRows" :key="item.id" class="attendance-item">
                 <div class="attendance-date">{{ item.date }}</div>
                 <div class="attendance-content">
                   <div>{{ item.courseName }} · {{ item.type }}</div>
@@ -163,7 +205,7 @@ function getNoticeType(level) {
             <template #header>
               <div class="panel-header">作业完成进度</div>
             </template>
-            <div v-for="task in learningCenterMock.assignments" :key="task.id" class="assignment-item">
+            <div v-for="task in assignmentRows" :key="task.id" class="assignment-item">
               <div class="assignment-head">
                 <div class="assignment-title">{{ task.title }}</div>
                 <el-tag size="small" :type="getAssignmentStatusType(task.status)">{{ task.status }}</el-tag>
@@ -180,7 +222,7 @@ function getNoticeType(level) {
               <div class="panel-header">通知公告</div>
             </template>
             <div class="notice-list">
-              <div v-for="notice in learningCenterMock.notices" :key="notice.id" class="notice-item">
+              <div v-for="notice in noticeRows" :key="notice.id" class="notice-item">
                 <div class="notice-top">
                   <div class="notice-title">{{ notice.title }}</div>
                   <el-tag size="small" :type="getNoticeType(notice.level)">{{ notice.level }}</el-tag>

@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
 public class TeacherBatchAttendanceSaveDTO {
-    @NotNull(message = "教师ID不能为空")
     private Long operatorTeacherId;
     @NotNull(message = "班级ID不能为空")
     private Long classId;

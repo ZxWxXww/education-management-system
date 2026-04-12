@@ -1,91 +1,40 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { Calendar, Plus, Search, Setting, UserFilled } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Calendar, Search } from '@element-plus/icons-vue'
+import { fetchTeacherClassPage } from '../../api/teacher/class'
 
-// 班级管理页 Mock 数据（切换真实后端时，请在 src/api/teacher/class.js 中封装接口并替换）
 const queryForm = ref({
   keyword: '',
   grade: '全部年级',
   status: '全部状态'
 })
+const router = useRouter()
+const loading = ref(false)
+const classList = ref([])
 
 const gradeOptions = ['全部年级', '高一', '高二', '高三']
 const statusOptions = ['全部状态', '进行中', '待开课', '已结课']
 
-const classStatistics = [
-  { key: 'total', label: '班级总数', value: 12, unit: '个' },
-  { key: 'running', label: '进行中', value: 8, unit: '个' },
-  { key: 'students', label: '在读学员', value: 356, unit: '人' },
-  { key: 'attendance', label: '本周平均出勤', value: 95.3, unit: '%' }
-]
-
-const classList = [
-  {
-    classId: 'CLS-2026-001',
-    className: '高二数学提高班',
-    courseName: '函数与导数',
-    grade: '高二',
-    schedule: '每周一/三 08:30-10:00',
-    classroom: 'B-302',
-    studentCount: 45,
-    maxStudentCount: 48,
-    attendanceRate: 96.4,
-    status: '进行中',
-    created_at: '2026-02-20 09:00:00',
-    updated_at: '2026-04-06 08:45:00'
-  },
-  {
-    classId: 'CLS-2026-006',
-    className: '高二数学冲刺班',
-    courseName: '数列与不等式',
-    grade: '高二',
-    schedule: '每周二/四 13:30-15:00',
-    classroom: 'A-201',
-    studentCount: 42,
-    maxStudentCount: 45,
-    attendanceRate: 94.7,
-    status: '进行中',
-    created_at: '2026-02-24 10:00:00',
-    updated_at: '2026-04-06 08:30:00'
-  },
-  {
-    classId: 'CLS-2026-010',
-    className: '高一数学基础巩固班',
-    courseName: '集合与函数概念',
-    grade: '高一',
-    schedule: '每周五 19:00-20:30',
-    classroom: '线上直播',
-    studentCount: 38,
-    maxStudentCount: 50,
-    attendanceRate: 91.6,
-    status: '待开课',
-    created_at: '2026-03-03 14:20:00',
-    updated_at: '2026-04-05 21:15:00'
-  },
-  {
-    classId: 'CLS-2025-021',
-    className: '高三数学复盘班',
-    courseName: '真题专题训练',
-    grade: '高三',
-    schedule: '每周日 09:00-11:00',
-    classroom: 'C-105',
-    studentCount: 40,
-    maxStudentCount: 40,
-    attendanceRate: 97.1,
-    status: '已结课',
-    created_at: '2025-09-01 09:00:00',
-    updated_at: '2026-01-20 11:30:00'
-  }
-]
-
-const pendingTodo = [
-  { title: '高二数学提高班：第6章周测待发布', level: 'high' },
-  { title: '高二数学冲刺班：2名学员连续两次缺勤', level: 'warn' },
-  { title: '高一数学基础巩固班：课件需补充例题', level: 'normal' }
-]
+const classStatistics = computed(() => {
+  const total = classList.value.length
+  const running = classList.value.filter((item) => item.status === '进行中').length
+  const students = classList.value.reduce((sum, item) => sum + Number(item.studentCount || 0), 0)
+  const attendanceSource = classList.value.filter((item) => Number(item.attendanceRate) > 0)
+  const attendance = attendanceSource.length
+    ? (attendanceSource.reduce((sum, item) => sum + Number(item.attendanceRate || 0), 0) / attendanceSource.length).toFixed(1)
+    : '0.0'
+  return [
+    { key: 'total', label: '班级总数', value: total, unit: '个' },
+    { key: 'running', label: '进行中', value: running, unit: '个' },
+    { key: 'students', label: '在读学员', value: students, unit: '人' },
+    { key: 'attendance', label: '本周平均出勤', value: attendance, unit: '%' }
+  ]
+})
 
 const filteredClassList = computed(() =>
-  classList.filter((item) => {
+  classList.value.filter((item) => {
     const keyword = queryForm.value.keyword.trim()
     const matchKeyword =
       !keyword ||
@@ -98,10 +47,70 @@ const filteredClassList = computed(() =>
   })
 )
 
+const classInsights = computed(() => {
+  const rows = filteredClassList.value
+  const totalStudents = rows.reduce((sum, item) => sum + Number(item.studentCount || 0), 0)
+  const withoutSchedule = rows.filter((item) => !item.schedule).length
+  const zeroAttendance = rows.filter((item) => Number(item.attendanceRate || 0) <= 0).length
+  const completed = rows.filter((item) => item.status !== '进行中').length
+
+  return [
+    {
+      key: 'visible',
+      label: '当前筛选班级',
+      value: `${rows.length} 个`,
+      desc: '列表和统计均直接来自教师班级接口'
+    },
+    {
+      key: 'students',
+      label: '覆盖学员',
+      value: `${totalStudents} 人`,
+      desc: '按真实班级人数汇总'
+    },
+    {
+      key: 'schedule',
+      label: '缺少排课周期',
+      value: `${withoutSchedule} 个`,
+      desc: '班级开始/结束时间未配置时会出现在这里'
+    },
+    {
+      key: 'attendance',
+      label: '未形成出勤记录',
+      value: `${zeroAttendance} 个`,
+      desc: completed > 0 ? `其中已结课 ${completed} 个` : '当前筛选范围内暂无已结课班级'
+    }
+  ]
+})
+
 function resetQuery() {
   queryForm.value.keyword = ''
   queryForm.value.grade = '全部年级'
   queryForm.value.status = '全部状态'
+  loadClassPage()
+}
+
+async function loadClassPage() {
+  loading.value = true
+  try {
+    const page = await fetchTeacherClassPage({
+      keyword: queryForm.value.keyword,
+      pageNum: 1,
+      pageSize: 100
+    })
+    classList.value = page.list
+  } catch (error) {
+    ElMessage.error('班级数据加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openClassDetail(row) {
+  if (!row?.id) {
+    ElMessage.warning('当前班级缺少有效 ID，暂时无法查看详情')
+    return
+  }
+  router.push(`/teacher/courses/classes/${row.id}`)
 }
 
 function statusType(status) {
@@ -110,11 +119,9 @@ function statusType(status) {
   return 'info'
 }
 
-function todoType(level) {
-  if (level === 'high') return 'danger'
-  if (level === 'warn') return 'warning'
-  return 'info'
-}
+onMounted(() => {
+  loadClassPage()
+})
 </script>
 
 <template>
@@ -124,16 +131,6 @@ function todoType(level) {
         <p class="management-hero__path">我的课程 / 班级管理</p>
         <h1 class="management-hero__title">班级管理</h1>
         <p class="management-hero__desc">集中管理授课班级、课表进度与学员学习状态</p>
-      </div>
-      <div class="management-hero__actions">
-        <el-button type="primary" class="hero-btn">
-          <el-icon><Plus /></el-icon>
-          <span>新建班级</span>
-        </el-button>
-        <el-button class="hero-btn" plain>
-          <el-icon><Setting /></el-icon>
-          <span>排课设置</span>
-        </el-button>
       </div>
     </section>
 
@@ -168,13 +165,16 @@ function todoType(level) {
           </el-select>
         </el-form-item>
         <el-form-item>
+          <el-button type="primary" :icon="Search" @click="loadClassPage">查询</el-button>
+        </el-form-item>
+        <el-form-item>
           <el-button @click="resetQuery">重置</el-button>
         </el-form-item>
       </el-form>
     </section>
 
     <section class="content-grid">
-      <article class="panel">
+      <article v-loading="loading" class="panel">
         <header class="panel__head panel__head--table">
           <h2><el-icon><Calendar /></el-icon> 班级列表</h2>
           <span>共 {{ filteredClassList.length }} 个班级</span>
@@ -198,9 +198,8 @@ function todoType(level) {
             </template>
           </el-table-column>
           <el-table-column label="操作" min-width="120" fixed="right">
-            <template #default>
-              <el-button link type="primary">查看详情</el-button>
-              <el-button link type="primary">编辑</el-button>
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openClassDetail(row)">查看详情</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -208,15 +207,14 @@ function todoType(level) {
 
       <article class="panel panel--aside">
         <header class="panel__head">
-          <h2><el-icon><UserFilled /></el-icon> 班级待办</h2>
-          <span>{{ pendingTodo.length }} 条</span>
+          <h2>真实数据提示</h2>
+          <span>{{ classInsights.length }} 项</span>
         </header>
-        <div class="todo-list">
-          <div v-for="item in pendingTodo" :key="item.title" class="todo-item">
-            <el-tag size="small" :type="todoType(item.level)" effect="plain">
-              {{ item.level === 'high' ? '高优先' : item.level === 'warn' ? '提醒' : '常规' }}
-            </el-tag>
-            <p>{{ item.title }}</p>
+        <div class="insight-list">
+          <div v-for="item in classInsights" :key="item.key" class="insight-item">
+            <p class="insight-item__label">{{ item.label }}</p>
+            <strong class="insight-item__value">{{ item.value }}</strong>
+            <p class="insight-item__desc">{{ item.desc }}</p>
           </div>
         </div>
       </article>
@@ -266,16 +264,6 @@ function todoType(level) {
   margin-top: 8px;
   color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
-}
-
-.management-hero__actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.hero-btn {
-  border-radius: 10px;
 }
 
 .statistics-grid {
@@ -362,13 +350,13 @@ function todoType(level) {
   align-self: start;
 }
 
-.todo-list {
+.insight-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.todo-item {
+.insight-item {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px;
@@ -377,11 +365,18 @@ function todoType(level) {
   gap: 6px;
 }
 
-.todo-item p {
+.insight-item__label,
+.insight-item__desc {
   margin: 0;
   color: #374151;
   font-size: 13px;
   line-height: 20px;
+}
+
+.insight-item__value {
+  color: #111827;
+  font-size: 20px;
+  line-height: 28px;
 }
 
 @media (max-width: 1080px) {
@@ -407,20 +402,22 @@ function todoType(level) {
 
 :global(html.dark) .statistics-card,
 :global(html.dark) .panel,
-:global(html.dark) .todo-item {
+:global(html.dark) .insight-item {
   background: #1a2028;
   border-color: #2b3442;
 }
 
 :global(html.dark) .statistics-card__value,
-:global(html.dark) .panel__head h2 {
+:global(html.dark) .panel__head h2,
+:global(html.dark) .insight-item__value {
   color: #e5eaf3;
 }
 
 :global(html.dark) .statistics-card__label,
 :global(html.dark) .statistics-card__value small,
 :global(html.dark) .panel__head span,
-:global(html.dark) .todo-item p {
+:global(html.dark) .insight-item__label,
+:global(html.dark) .insight-item__desc {
   color: #9ba7ba;
 }
 </style>

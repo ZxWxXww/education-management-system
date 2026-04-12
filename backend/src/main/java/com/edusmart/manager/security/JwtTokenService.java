@@ -9,6 +9,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -29,14 +30,18 @@ public class JwtTokenService {
         this.key = Keys.hmacShaKeyFor(bytes);
     }
 
-    public String createToken(String username, String role) {
+    public String createToken(String username, String role, List<String> roles, List<String> permissions) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(props.getTtlSeconds());
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(exp))
-                .claims(Map.of("role", role))
+                .claims(Map.of(
+                        "role", role,
+                        "roles", roles == null ? List.of() : roles,
+                        "permissions", permissions == null ? List.of() : permissions
+                ))
                 .signWith(key)
                 .compact();
     }

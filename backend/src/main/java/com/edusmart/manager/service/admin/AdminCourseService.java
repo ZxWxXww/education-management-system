@@ -1,14 +1,14 @@
 package com.edusmart.manager.service.admin;
 
 import com.edusmart.manager.common.PageData;
+import com.edusmart.manager.dto.admin.AdminCoursePageItemDTO;
 import com.edusmart.manager.dto.admin.CoursePageQueryDTO;
 import com.edusmart.manager.dto.admin.CourseSaveDTO;
-import com.edusmart.manager.entity.EduCourseEntity;
 
 public interface AdminCourseService {
-    PageData<EduCourseEntity> page(CoursePageQueryDTO queryDTO);
+    PageData<AdminCoursePageItemDTO> page(CoursePageQueryDTO queryDTO);
 
-    EduCourseEntity getById(Long id);
+    AdminCoursePageItemDTO getById(Long id);
 
     Long create(CourseSaveDTO dto);
 

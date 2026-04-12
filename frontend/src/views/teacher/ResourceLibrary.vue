@@ -1,19 +1,47 @@
-﻿<script setup>
-import { FolderOpened, UploadFilled } from '@element-plus/icons-vue'
+﻿﻿<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { FolderOpened } from '@element-plus/icons-vue'
+import { fetchTeacherResourcePage } from '../../api/teacher/resource'
 
-// 教学资料库 Mock 数据（切换真实后端时，请替换为 src/api/teacher/resourceLibrary.js 的接口返回）
-const resourceStats = [
-  { label: '资料总数', value: '128' },
-  { label: '本周新增', value: '16' },
-  { label: '下载次数', value: '1,024' },
-  { label: '共享班级', value: '12' }
-]
+const loading = ref(false)
+const resourceList = ref([])
 
-const resourceList = [
-  { id: 'RES-2026-001', title: '高二数学函数专题讲义', type: 'PDF', className: '高二（3）班', created_at: '2026-04-09 08:12:00', updated_at: '2026-04-09 08:12:00' },
-  { id: 'RES-2026-002', title: '高二数学期中复习题库', type: 'Word', className: '高二（6）班', created_at: '2026-04-09 10:42:00', updated_at: '2026-04-09 10:42:00' },
-  { id: 'RES-2026-003', title: '竞赛班数列进阶习题', type: 'PPT', className: '竞赛1班', created_at: '2026-04-08 19:15:00', updated_at: '2026-04-08 19:15:00' }
-]
+function isWithinRecentSevenDays(value) {
+  if (!value || value === '-') return false
+  const timestamp = new Date(String(value).replace(' ', 'T')).getTime()
+  if (Number.isNaN(timestamp)) return false
+  return Date.now() - timestamp <= 7 * 24 * 60 * 60 * 1000
+}
+
+const resourceStats = computed(() => {
+  const total = resourceList.value.length
+  const recent = resourceList.value.filter((item) => isWithinRecentSevenDays(item.createdAt)).length
+  const downloads = resourceList.value.reduce((sum, item) => sum + Number(item.downloadCount || 0), 0)
+  const classes = new Set(resourceList.value.map((item) => item.className).filter(Boolean)).size
+  return [
+    { label: '资料总数', value: String(total) },
+    { label: '最近7天新增', value: String(recent) },
+    { label: '下载次数', value: String(downloads) },
+    { label: '共享班级', value: String(classes) }
+  ]
+})
+
+async function loadResources() {
+  loading.value = true
+  try {
+    const page = await fetchTeacherResourcePage({ pageNum: 1, pageSize: 100 })
+    resourceList.value = page.list
+  } catch (error) {
+    ElMessage.error('教学资源加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadResources()
+})
 </script>
 
 <template>
@@ -24,7 +52,6 @@ const resourceList = [
         <h1>教学资料库</h1>
         <p class="desc">统一管理教案、讲义与题库资源，支持班级级别共享分发</p>
       </div>
-      <el-button type="primary" :icon="UploadFilled">上传资料</el-button>
     </section>
 
     <section class="stats-grid">
@@ -36,15 +63,16 @@ const resourceList = [
 
     <section class="panel">
       <header class="panel-head">
-        <h2><el-icon><FolderOpened /></el-icon> 资料列表（Mock）</h2>
+        <h2><el-icon><FolderOpened /></el-icon> 资料列表</h2>
       </header>
-      <el-table :data="resourceList" stripe>
-        <el-table-column prop="id" label="资料编号" min-width="140" />
+      <el-table v-loading="loading" :data="resourceList" stripe>
+        <el-table-column prop="resourceId" label="资料编号" min-width="140" />
         <el-table-column prop="title" label="资料名称" min-width="220" />
         <el-table-column prop="type" label="类型" min-width="100" />
         <el-table-column prop="className" label="适用班级" min-width="120" />
-        <el-table-column prop="created_at" label="created_at" min-width="170" />
-        <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+        <el-table-column prop="courseName" label="课程" min-width="140" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
       </el-table>
     </section>
   </div>

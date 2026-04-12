@@ -1,7 +1,8 @@
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageShell from '../../components/PageShell.vue'
+import { fetchCurrentTeacherProfile, updateCurrentTeacherProfile } from '../../api/teacher/profile'
 
 const props = defineProps({
   embedded: { type: Boolean, default: false }
@@ -16,63 +17,78 @@ const shellProps = computed(() =>
       }
 )
 
-// 个人信息 Mock 数据（切换真实后端时，请替换为 src/api/teacher/profile.js 的接口返回）
-const initialProfile = {
-  teacherNo: 'TCH-2024-018',
-  name: '王雅静',
-  gender: '女',
-  phone: '13800138000',
-  email: 'wang.yajing@edusmart.com',
-  campus: '总部校区',
-  department: '数学教研组',
-  title: '高级讲师',
-  education: '硕士研究生',
-  joinDate: '2022-08-15',
-  intro:
-    '负责高一至高二数学课程，擅长函数与解析几何专项训练。持续推进分层教学与错题闭环管理，提升班级整体达标率。',
-  created_at: '2026-04-06 08:00:00',
-  updated_at: '2026-04-06 08:00:00'
+function createEmptyProfile() {
+  return {
+    userId: null,
+    teacherProfileId: null,
+    teacherNo: '-',
+    username: '',
+    name: '',
+    phone: '',
+    email: '',
+    title: '',
+    subject: '',
+    intro: '',
+    hireDate: '',
+    createdAt: '-',
+    updatedAt: '-'
+  }
 }
 
-const profileForm = reactive({ ...initialProfile })
+const loading = ref(false)
+const saveLoading = ref(false)
+const profileForm = reactive(createEmptyProfile())
+const profileSnapshot = ref(createEmptyProfile())
 
-const teachingTags = ['高一数学', '高二数学', '竞赛培优', '教研组长']
+const teachingTags = computed(() =>
+  [profileForm.subject, profileForm.title].filter(Boolean)
+)
 
-const certifications = [
-  {
-    id: 1,
-    name: '高级中学教师资格证（数学）',
-    issueDate: '2021-06-10',
-    created_at: '2026-04-06 08:00:00',
-    updated_at: '2026-04-06 08:00:00'
-  },
-  {
-    id: 2,
-    name: '信息化教学能力认证',
-    issueDate: '2024-09-18',
-    created_at: '2026-04-06 08:00:00',
-    updated_at: '2026-04-06 08:00:00'
-  }
-]
+function syncProfile(profile) {
+  Object.assign(profileForm, createEmptyProfile(), profile)
+  profileSnapshot.value = { ...profileForm }
+}
 
 function handleReset() {
-  Object.assign(profileForm, initialProfile)
-  ElMessage.success('已恢复为初始资料')
+  Object.assign(profileForm, profileSnapshot.value)
+  ElMessage.success('已恢复为最近一次同步的真实资料')
 }
 
-function handleSave() {
-  profileForm.updated_at = '2026-04-06 08:30:00'
-  ElMessage.success('个人信息保存成功（Mock）')
+async function handleSave() {
+  saveLoading.value = true
+  try {
+    await updateCurrentTeacherProfile(profileForm)
+    await loadProfile()
+    ElMessage.success('个人信息保存成功')
+  } finally {
+    saveLoading.value = false
+  }
 }
+
+async function loadProfile() {
+  loading.value = true
+  try {
+    const profile = await fetchCurrentTeacherProfile()
+    syncProfile(profile)
+  } catch (error) {
+    ElMessage.error(error.message || '教师个人信息加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadProfile()
+})
 </script>
 
 <template>
   <component :is="props.embedded ? 'div' : PageShell" v-bind="shellProps">
-    <div class="personal-info">
+    <div v-loading="loading" class="personal-info">
     <section class="profile-overview">
-      <div class="avatar-box">{{ profileForm.name.slice(0, 1) }}</div>
+      <div class="avatar-box">{{ (profileForm.name || '师').slice(0, 1) }}</div>
       <p class="profile-name">{{ profileForm.name }}</p>
-      <p class="profile-meta">{{ profileForm.department }} · {{ profileForm.title }}</p>
+      <p class="profile-meta">{{ profileForm.subject || '未设置学科' }} · {{ profileForm.title || '未设置职称' }}</p>
       <div class="tag-group">
         <el-tag v-for="tag in teachingTags" :key="tag" effect="plain" round>{{ tag }}</el-tag>
       </div>
@@ -83,15 +99,15 @@ function handleSave() {
         </div>
         <div class="meta-item">
           <span>入职日期</span>
-          <strong>{{ profileForm.joinDate }}</strong>
+          <strong>{{ profileForm.hireDate || '-' }}</strong>
         </div>
         <div class="meta-item">
           <span>创建时间</span>
-          <strong>{{ profileForm.created_at }}</strong>
+          <strong>{{ profileForm.createdAt }}</strong>
         </div>
         <div class="meta-item">
           <span>更新时间</span>
-          <strong>{{ profileForm.updated_at }}</strong>
+          <strong>{{ profileForm.updatedAt }}</strong>
         </div>
       </div>
     </section>
@@ -105,49 +121,29 @@ function handleSave() {
         <el-form-item label="姓名">
           <el-input v-model="profileForm.name" />
         </el-form-item>
-        <el-form-item label="性别">
-          <el-select v-model="profileForm.gender" style="width: 100%">
-            <el-option label="女" value="女" />
-            <el-option label="男" value="男" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="手机号">
           <el-input v-model="profileForm.phone" />
         </el-form-item>
         <el-form-item label="邮箱">
           <el-input v-model="profileForm.email" />
         </el-form-item>
-        <el-form-item label="所属校区">
-          <el-input v-model="profileForm.campus" />
-        </el-form-item>
-        <el-form-item label="所属部门">
-          <el-input v-model="profileForm.department" />
-        </el-form-item>
         <el-form-item label="职称">
           <el-input v-model="profileForm.title" />
         </el-form-item>
-        <el-form-item label="学历">
-          <el-input v-model="profileForm.education" />
+        <el-form-item label="任教学科">
+          <el-input v-model="profileForm.subject" />
         </el-form-item>
         <el-form-item label="入职日期">
-          <el-date-picker v-model="profileForm.joinDate" type="date" style="width: 100%" value-format="YYYY-MM-DD" />
+          <el-date-picker v-model="profileForm.hireDate" type="date" style="width: 100%" value-format="YYYY-MM-DD" />
         </el-form-item>
         <el-form-item label="个人简介" class="form-grid__full">
           <el-input v-model="profileForm.intro" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
 
-      <h3 class="section-title">资质证书</h3>
-      <div class="certificate-list">
-        <div v-for="item in certifications" :key="item.id" class="certificate-item">
-          <p class="certificate-name">{{ item.name }}</p>
-          <p class="certificate-meta">发证日期：{{ item.issueDate }}</p>
-        </div>
-      </div>
-
       <div class="action-row">
         <el-button @click="handleReset">重置</el-button>
-        <el-button type="primary" @click="handleSave">保存信息</el-button>
+        <el-button type="primary" :loading="saveLoading" @click="handleSave">保存信息</el-button>
       </div>
     </section>
     </div>

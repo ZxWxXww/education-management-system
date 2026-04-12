@@ -1,4 +1,4 @@
-﻿﻿<script setup>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { DocumentChecked, FolderOpened, Operation, UserFilled, WarningFilled } from '@element-plus/icons-vue'
@@ -6,6 +6,7 @@ import { getMenuByRole } from '../menus'
 
 const props = defineProps({
   role: { type: String, required: true },
+  permissions: { type: Array, default: () => [] },
   activePath: { type: String, required: true },
   collapsed: { type: Boolean, default: false }
 })
@@ -20,7 +21,7 @@ const iconMap = {
   UserFilled
 }
 
-const menu = computed(() => getMenuByRole(props.role))
+const menu = computed(() => getMenuByRole(props.role, props.permissions))
 
 const activeRootMenuPath = computed(() => {
   const target = menu.value.find((item) => {

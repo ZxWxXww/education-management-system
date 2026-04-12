@@ -3,6 +3,8 @@ package com.edusmart.manager.service.admin.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.edusmart.manager.common.PageData;
+import com.edusmart.manager.common.StatusLabelMapper;
+import com.edusmart.manager.dto.admin.AdminCoursePageItemDTO;
 import com.edusmart.manager.dto.admin.CoursePageQueryDTO;
 import com.edusmart.manager.dto.admin.CourseSaveDTO;
 import com.edusmart.manager.entity.EduCourseEntity;
@@ -10,6 +12,8 @@ import com.edusmart.manager.mapper.EduCourseMapper;
 import com.edusmart.manager.service.admin.AdminCourseService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+
+import java.util.List;
 
 @Service
 public class AdminCourseServiceImpl implements AdminCourseService {
@@ -20,7 +24,7 @@ public class AdminCourseServiceImpl implements AdminCourseService {
     }
 
     @Override
-    public PageData<EduCourseEntity> page(CoursePageQueryDTO queryDTO) {
+    public PageData<AdminCoursePageItemDTO> page(CoursePageQueryDTO queryDTO) {
         QueryWrapper<EduCourseEntity> wrapper = new QueryWrapper<>();
         if (StringUtils.hasText(queryDTO.getKeyword())) {
             wrapper.and(w -> w.like("course_code", queryDTO.getKeyword())
@@ -32,12 +36,12 @@ public class AdminCourseServiceImpl implements AdminCourseService {
         }
         wrapper.orderByDesc("id");
         Page<EduCourseEntity> page = courseMapper.selectPage(new Page<>(queryDTO.getCurrent(), queryDTO.getSize()), wrapper);
-        return new PageData<>(page.getCurrent(), page.getSize(), page.getTotal(), page.getRecords());
+        return new PageData<>(page.getCurrent(), page.getSize(), page.getTotal(), page.getRecords().stream().map(this::toDto).toList());
     }
 
     @Override
-    public EduCourseEntity getById(Long id) {
-        return courseMapper.selectById(id);
+    public AdminCoursePageItemDTO getById(Long id) {
+        return toDto(courseMapper.selectById(id));
     }
 
     @Override
@@ -69,5 +73,22 @@ public class AdminCourseServiceImpl implements AdminCourseService {
     @Override
     public void delete(Long id) {
         courseMapper.deleteById(id);
+    }
+
+    private AdminCoursePageItemDTO toDto(EduCourseEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+        AdminCoursePageItemDTO dto = new AdminCoursePageItemDTO();
+        dto.setId(entity.getId());
+        dto.setCourseCode(entity.getCourseCode());
+        dto.setCourseName(entity.getCourseName());
+        dto.setSubject(entity.getSubject());
+        dto.setDescription(entity.getDescription());
+        dto.setStatus(entity.getStatus());
+        dto.setStatusLabel(StatusLabelMapper.courseStatusLabel(entity.getStatus()));
+        dto.setCreatedAt(entity.getCreatedAt());
+        dto.setUpdatedAt(entity.getUpdatedAt());
+        return dto;
     }
 }

@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Bell, Clock, DataAnalysis, Search, Warning } from '@element-plus/icons-vue'
+import { fetchTeacherAttendanceExceptionPage } from '../../api/teacher/attendance'
 
-// 教师端异常考勤页 Mock 数据（切换真实后端时，请替换为 src/api/teacher/attendance.js 的接口返回）
 const filterForm = ref({
   keyword: '',
   abnormalType: '',
@@ -14,99 +15,21 @@ const abnormalTypeOptions = [
   { label: '全部类型', value: '' },
   { label: '迟到', value: '迟到' },
   { label: '缺勤', value: '缺勤' },
-  { label: '早退', value: '早退' },
-  { label: '请假未审批', value: '请假未审批' }
+  { label: '早退', value: '早退' }
 ]
 
 const handleStatusOptions = [
   { label: '全部状态', value: '' },
   { label: '待处理', value: '待处理' },
-  { label: '已处理', value: '已处理' },
-  { label: '已通知家长', value: '已通知家长' }
+  { label: '已处理', value: '已处理' }
 ]
 
-const weeklyTrend = [
-  { day: '周一', count: 4 },
-  { day: '周二', count: 6 },
-  { day: '周三', count: 3 },
-  { day: '周四', count: 8 },
-  { day: '周五', count: 5 },
-  { day: '周六', count: 2 },
-  { day: '周日', count: 1 }
-]
+const attendanceRecords = ref([])
+const loading = ref(false)
 
-const attendanceRecords = ref([
-  {
-    id: 'ATT-T-20260406-001',
-    studentName: '李同学',
-    studentNo: 'STU20260031',
-    className: '高二（3）班',
-    courseName: '高二数学提高班',
-    abnormalType: '迟到',
-    checkInTime: '2026-04-06 08:42:00',
-    teacherName: '王老师',
-    handleStatus: '待处理',
-    remark: '早高峰堵车，迟到 12 分钟',
-    created_at: '2026-04-06 08:42:00',
-    updated_at: '2026-04-06 08:43:20'
-  },
-  {
-    id: 'ATT-T-20260406-002',
-    studentName: '张同学',
-    studentNo: 'STU20260108',
-    className: '高二（6）班',
-    courseName: '高二数学冲刺班',
-    abnormalType: '缺勤',
-    checkInTime: '2026-04-06 13:32:00',
-    teacherName: '王老师',
-    handleStatus: '已通知家长',
-    remark: '未到课，已电话联系家长',
-    created_at: '2026-04-06 13:32:00',
-    updated_at: '2026-04-06 13:50:10'
-  },
-  {
-    id: 'ATT-T-20260405-003',
-    studentName: '赵同学',
-    studentNo: 'STU20260052',
-    className: '竞赛1班',
-    courseName: '高二竞赛数学',
-    abnormalType: '早退',
-    checkInTime: '2026-04-05 20:05:00',
-    teacherName: '王老师',
-    handleStatus: '已处理',
-    remark: '身体不适提前离场',
-    created_at: '2026-04-05 20:05:00',
-    updated_at: '2026-04-05 20:30:00'
-  },
-  {
-    id: 'ATT-T-20260405-004',
-    studentName: '孙同学',
-    studentNo: 'STU20260203',
-    className: '高二（3）班',
-    courseName: '高二数学提高班',
-    abnormalType: '请假未审批',
-    checkInTime: '2026-04-05 08:30:00',
-    teacherName: '王老师',
-    handleStatus: '待处理',
-    remark: '请假申请已提交，待教务审批',
-    created_at: '2026-04-05 08:30:00',
-    updated_at: '2026-04-05 08:31:00'
-  },
-  {
-    id: 'ATT-T-20260404-005',
-    studentName: '周同学',
-    studentNo: 'STU20260122',
-    className: '高二（6）班',
-    courseName: '高二数学冲刺班',
-    abnormalType: '缺勤',
-    checkInTime: '2026-04-04 13:30:00',
-    teacherName: '王老师',
-    handleStatus: '已处理',
-    remark: '补签与请假材料已补齐',
-    created_at: '2026-04-04 13:30:00',
-    updated_at: '2026-04-04 16:12:00'
-  }
-])
+function getRecordDate(item) {
+  return String(item.checkInTime || '').slice(0, 10)
+}
 
 const selectedRecord = ref(null)
 const drawerVisible = ref(false)
@@ -123,7 +46,7 @@ const filteredRecords = computed(() => {
       item.className.includes(keyword)
     const matchType = !filterForm.value.abnormalType || item.abnormalType === filterForm.value.abnormalType
     const matchStatus = !filterForm.value.handleStatus || item.handleStatus === filterForm.value.handleStatus
-    const dateValue = item.checkInTime.slice(0, 10)
+    const dateValue = getRecordDate(item)
     const matchDate = !startDate || !endDate || (dateValue >= startDate && dateValue <= endDate)
     return matchKeyword && matchType && matchStatus && matchDate
   })
@@ -135,12 +58,33 @@ const statisticCards = computed(() => {
   const absentCount = filteredRecords.value.filter((item) => item.abnormalType === '缺勤').length
   const unhandledCount = filteredRecords.value.filter((item) => item.handleStatus === '待处理').length
   return [
-    { label: '异常总数', value: total, icon: Bell, tone: 'primary' },
+    { label: '当前筛选异常数', value: total, icon: Bell, tone: 'primary' },
     { label: '迟到人数', value: lateCount, icon: Clock, tone: 'warning' },
     { label: '缺勤人数', value: absentCount, icon: Warning, tone: 'danger' },
     { label: '待处理', value: unhandledCount, icon: DataAnalysis, tone: 'info' }
   ]
 })
+
+const trendRecords = computed(() => {
+  const bucketMap = new Map()
+
+  filteredRecords.value.forEach((item) => {
+    const dateValue = getRecordDate(item)
+    if (!dateValue) return
+    bucketMap.set(dateValue, (bucketMap.get(dateValue) || 0) + 1)
+  })
+
+  return [...bucketMap.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(-7)
+    .map(([fullDate, count]) => ({
+      fullDate,
+      day: fullDate.slice(5),
+      count
+    }))
+})
+
+const trendMax = computed(() => Math.max(1, ...trendRecords.value.map((item) => item.count)))
 
 function resetFilter() {
   filterForm.value = {
@@ -148,6 +92,18 @@ function resetFilter() {
     abnormalType: '',
     handleStatus: '',
     dateRange: []
+  }
+}
+
+async function loadAttendanceExceptions() {
+  loading.value = true
+  try {
+    const page = await fetchTeacherAttendanceExceptionPage({ pageNum: 1, pageSize: 200 })
+    attendanceRecords.value = page.list
+  } catch (error) {
+    ElMessage.error('异常考勤加载失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -168,6 +124,10 @@ function getStatusTagType(status) {
   if (status === '已通知家长') return 'primary'
   return 'warning'
 }
+
+onMounted(() => {
+  loadAttendanceExceptions()
+})
 </script>
 
 <template>
@@ -178,7 +138,7 @@ function getStatusTagType(status) {
         <h1 class="teacher-abnormal__title">异常考勤</h1>
         <p class="teacher-abnormal__desc">实时跟踪课堂异常，统一处理迟到、缺勤与审批异常记录</p>
       </div>
-      <div class="teacher-abnormal__hero-badge">更新于 2026-04-06 21:30</div>
+      <div class="teacher-abnormal__hero-badge">更新于 {{ attendanceRecords[0]?.updatedAt || '-' }}</div>
     </section>
 
     <section class="teacher-abnormal__stats">
@@ -191,7 +151,7 @@ function getStatusTagType(status) {
       </article>
     </section>
 
-    <section class="panel">
+    <section v-loading="loading" class="panel">
       <header class="panel__head">
         <h2><el-icon><Search /></el-icon> 筛选条件</h2>
       </header>
@@ -220,9 +180,8 @@ function getStatusTagType(status) {
           />
         </el-form-item>
         <el-form-item class="filter-form__actions">
-          <el-button type="primary">查询</el-button>
+          <el-button type="primary" @click="loadAttendanceExceptions">查询</el-button>
           <el-button @click="resetFilter">重置</el-button>
-          <el-button type="success" plain>导出记录</el-button>
         </el-form-item>
       </el-form>
     </section>
@@ -260,16 +219,16 @@ function getStatusTagType(status) {
 
       <article class="panel trend-panel">
         <header class="panel__head">
-          <h2><el-icon><DataAnalysis /></el-icon> 一周异常趋势</h2>
+          <h2><el-icon><DataAnalysis /></el-icon> 最近 7 个异常日期</h2>
         </header>
         <div class="trend-list">
-          <div v-for="item in weeklyTrend" :key="item.day" class="trend-item">
+          <div v-for="item in trendRecords" :key="item.fullDate" class="trend-item">
             <div class="trend-item__top">
               <span>{{ item.day }}</span>
               <span>{{ item.count }} 人次</span>
             </div>
             <div class="trend-item__track">
-              <div class="trend-item__bar" :style="{ width: `${(item.count / 8) * 100}%` }"></div>
+              <div class="trend-item__bar" :style="{ width: `${(item.count / trendMax) * 100}%` }"></div>
             </div>
           </div>
         </div>
@@ -287,8 +246,8 @@ function getStatusTagType(status) {
         <p><strong>异常类型：</strong>{{ selectedRecord.abnormalType }}</p>
         <p><strong>处理状态：</strong>{{ selectedRecord.handleStatus }}</p>
         <p><strong>备注：</strong>{{ selectedRecord.remark }}</p>
-        <p><strong>created_at：</strong>{{ selectedRecord.created_at }}</p>
-        <p><strong>updated_at：</strong>{{ selectedRecord.updated_at }}</p>
+        <p><strong>创建时间：</strong>{{ selectedRecord.createdAt }}</p>
+        <p><strong>更新时间：</strong>{{ selectedRecord.updatedAt }}</p>
       </div>
     </el-drawer>
   </div>

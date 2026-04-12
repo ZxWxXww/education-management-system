@@ -1,18 +1,30 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  fetchAdminDisplayCurrent,
+  resetAdminDisplayCurrent,
+  updateAdminDisplayCurrent
+} from '../../api/admin/display'
 
-// 展示设置 mock 数据（后续接入真实接口时，可替换为 src/api/admin/display.js）
-const displayForm = ref({
-  siteTitle: '教培智管系统',
-  siteSubtitle: '让教学管理更高效',
-  darkModeDefault: true,
-  dashboardLayout: 'card-grid',
-  showAttendanceWidget: true,
-  showFinanceWidget: true,
-  loginNotice: '系统将于每周日 23:00 进行维护，请提前保存数据。',
-  brandColor: '#2563EB',
-  locale: 'zh-CN'
-})
+function createDefaultForm() {
+  return {
+    siteTitle: '',
+    siteSubtitle: '',
+    darkModeDefault: true,
+    dashboardLayout: 'card-grid',
+    showAttendanceWidget: true,
+    showFinanceWidget: true,
+    loginNotice: '',
+    brandColor: '#2563EB',
+    locale: 'zh-CN',
+    previewRecords: []
+  }
+}
+
+const displayForm = ref(createDefaultForm())
+const loading = ref(false)
+const saving = ref(false)
 
 const layoutOptions = [
   { label: '卡片网格', value: 'card-grid' },
@@ -24,40 +36,69 @@ const localeOptions = [
   { label: 'English', value: 'en-US' }
 ]
 
-const themePreviewCards = [
-  { title: '仪表盘卡片', value: '6 个组件可见', created_at: '2026-04-10 09:30:00', updated_at: '2026-04-10 09:30:00' },
-  { title: '公告轮播', value: '3 条公告', created_at: '2026-04-10 09:31:10', updated_at: '2026-04-10 09:31:10' }
-]
+const themePreviewCards = computed(() => displayForm.value.previewRecords || [])
 
-function saveSettings() {
-  ElMessage.success('已保存展示设置（mock）')
-}
-
-function resetSettings() {
-  displayForm.value = {
-    siteTitle: '教培智管系统',
-    siteSubtitle: '让教学管理更高效',
-    darkModeDefault: true,
-    dashboardLayout: 'card-grid',
-    showAttendanceWidget: true,
-    showFinanceWidget: true,
-    loginNotice: '系统将于每周日 23:00 进行维护，请提前保存数据。',
-    brandColor: '#2563EB',
-    locale: 'zh-CN'
+async function loadDisplayConfig() {
+  loading.value = true
+  try {
+    displayForm.value = await fetchAdminDisplayCurrent()
+  } catch (error) {
+    ElMessage.error(error.message || '展示设置加载失败')
+  } finally {
+    loading.value = false
   }
 }
+
+async function saveSettings() {
+  saving.value = true
+  try {
+    await updateAdminDisplayCurrent({
+      siteTitle: displayForm.value.siteTitle,
+      siteSubtitle: displayForm.value.siteSubtitle,
+      darkModeDefault: displayForm.value.darkModeDefault,
+      dashboardLayout: displayForm.value.dashboardLayout,
+      showAttendanceWidget: displayForm.value.showAttendanceWidget,
+      showFinanceWidget: displayForm.value.showFinanceWidget,
+      loginNotice: displayForm.value.loginNotice,
+      brandColor: displayForm.value.brandColor,
+      locale: displayForm.value.locale
+    })
+    ElMessage.success('展示设置已保存')
+    await loadDisplayConfig()
+  } catch (error) {
+    ElMessage.error(error.message || '展示设置保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function resetSettings() {
+  loading.value = true
+  try {
+    displayForm.value = await resetAdminDisplayCurrent()
+    ElMessage.success('已恢复默认展示设置')
+  } catch (error) {
+    ElMessage.error(error.message || '恢复默认展示设置失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadDisplayConfig()
+})
 </script>
 
 <template>
-  <div class="display-page">
+  <div v-loading="loading" class="display-page">
     <section class="page-head">
       <div>
         <h1 class="title">展示设置</h1>
         <p class="subtitle">机构设置 / 展示设置</p>
       </div>
       <div class="actions">
-        <el-button @click="resetSettings">恢复默认</el-button>
-        <el-button type="primary" @click="saveSettings">保存设置</el-button>
+        <el-button :disabled="saving" @click="resetSettings">恢复默认</el-button>
+        <el-button type="primary" :loading="saving" @click="saveSettings">保存设置</el-button>
       </div>
     </section>
 
@@ -117,12 +158,12 @@ function resetSettings() {
     </section>
 
     <section class="panel">
-      <header class="panel-title">预览记录（mock）</header>
+      <header class="panel-title">预览记录</header>
       <el-table :data="themePreviewCards" stripe>
         <el-table-column prop="title" label="模块" min-width="200" />
         <el-table-column prop="value" label="当前状态" min-width="160" />
-        <el-table-column prop="created_at" label="created_at" min-width="180" />
-        <el-table-column prop="updated_at" label="updated_at" min-width="180" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="180" />
+        <el-table-column prop="updatedAt" label="更新时间" min-width="180" />
       </el-table>
     </section>
   </div>

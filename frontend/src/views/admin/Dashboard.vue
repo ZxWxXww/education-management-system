@@ -1,59 +1,163 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Calendar, Reading, UserFilled, Wallet } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { fetchAdminAttendanceOverview } from '../../api/admin/attendance'
+import { fetchAdminBillPage } from '../../api/admin/bill'
+import { fetchAdminCoursePage } from '../../api/admin/course'
+import { fetchAdminClassPage } from '../../api/admin/class'
+import { fetchAdminUserPage } from '../../api/admin/user'
 
-// 仪表盘 mock 数据（后续可切换为 src/api/admin 下的真实接口）
-const statCards = [
-  { title: '总用户数', value: '1,280', trend: '+12.5%', icon: 'user' },
-  { title: '在读学员', value: '956', trend: '+8.2%', icon: 'student' },
-  { title: '今日报名', value: '42', trend: '+24.1%', icon: 'calendar' },
-  { title: '总收入', value: '¥284,500', trend: '+15.3%', icon: 'money' }
-]
+const router = useRouter()
+const loading = ref(false)
+const userRows = ref([])
+const courseRows = ref([])
+const classRows = ref([])
+const billRows = ref([])
+const attendanceOverview = ref({
+  totalAttendanceCount: 0,
+  punctualRate: 0,
+  leaveCount: 0,
+  exceptionCount: 0,
+  trend: [],
+  focusAlerts: []
+})
 
-const weekLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-const revenuePoints = [34, 92, 68, 156, 115, 178, 130]
-const enrollTrend = [
-  { label: '课程咨询', value: '98 人', percent: 82 },
-  { label: '试听预约', value: '76 人', percent: 65 },
-  { label: '报名转化', value: '42 人', percent: 44 },
-  { label: '退费申请', value: '6 人', percent: 12 }
-]
+const statCards = computed(() => {
+  const userTotal = userRows.value.length
+  const studentTotal = userRows.value.filter((item) => String(item.role).includes('学生')).length
+  const newWeekUsers = userRows.value.filter((item) => {
+    if (item.createdAt === '-') return false
+    return Date.now() - new Date(item.createdAt).getTime() <= 7 * 24 * 60 * 60 * 1000
+  }).length
+  const totalPaid = billRows.value.reduce((sum, item) => sum + Number(item.paidAmount || 0), 0)
+  return [
+    { title: '总用户数', value: `${userTotal}`, trend: `启用 ${userRows.value.filter((item) => item.status === '启用').length}`, icon: 'user' },
+    { title: '在读学员', value: `${studentTotal}`, trend: `班级 ${classRows.value.length}`, icon: 'student' },
+    { title: '近 7 天新增', value: `${newWeekUsers}`, trend: `课程 ${courseRows.value.length}`, icon: 'calendar' },
+    { title: '累计实收', value: `¥${totalPaid.toFixed(2)}`, trend: `准点率 ${attendanceOverview.value.punctualRate}%`, icon: 'money' }
+  ]
+})
 
-const activityList = [
-  { title: '课程《高一数学冲刺班》已创建', desc: '教务处 · 2 分钟前', action: '查看详情' },
-  { title: '学员请假申请待处理 3 条', desc: '班主任系统 · 10 分钟前', action: '处理' },
-  { title: '系统完成凌晨数据备份', desc: '运维服务 · 31 分钟前', action: '日志' }
-]
+const weekLabels = computed(() => attendanceOverview.value.trend.map((item) => item.label))
+const revenuePoints = computed(() => attendanceOverview.value.trend.map((item) => item.punctualRate))
+const enrollTrend = computed(() => {
+  const total = userRows.value.length || 1
+  const enabledUsers = userRows.value.filter((item) => item.status === '启用').length
+  const teachers = userRows.value.filter((item) => String(item.role).includes('教师')).length
+  const students = userRows.value.filter((item) => String(item.role).includes('学生')).length
+  const admins = userRows.value.filter((item) => String(item.role).includes('管理员')).length
+  return [
+    { label: '启用用户', value: `${enabledUsers} 人`, percent: Math.round((enabledUsers / total) * 100) },
+    { label: '教师用户', value: `${teachers} 人`, percent: Math.round((teachers / total) * 100) },
+    { label: '学生用户', value: `${students} 人`, percent: Math.round((students / total) * 100) },
+    { label: '管理员', value: `${admins} 人`, percent: Math.round((admins / total) * 100) }
+  ]
+})
+
+const activityList = computed(() => {
+  const items = []
+  if (courseRows.value[0]) {
+    items.push({
+      title: `课程《${courseRows.value[0].courseName}》最近更新`,
+      desc: `课程管理 · ${courseRows.value[0].updatedAt}`,
+      path: '/admin/course',
+      buttonText: '查看课程'
+    })
+  }
+  if (classRows.value[0]) {
+    items.push({
+      title: `班级《${classRows.value[0].className}》状态为 ${classRows.value[0].status}`,
+      desc: `班级管理 · ${classRows.value[0].updatedAt}`,
+      path: '/admin/course/classes',
+      buttonText: '查看班级'
+    })
+  }
+  if (billRows.value[0]) {
+    items.push({
+      title: `财单 ${billRows.value[0].billNo} 当前为 ${billRows.value[0].status}`,
+      desc: `财单管理 · ${billRows.value[0].updatedAt}`,
+      path: '/admin/finance/bills',
+      buttonText: '查看财单'
+    })
+  }
+  attendanceOverview.value.focusAlerts.forEach((item) => {
+    items.push({
+      title: item.text,
+      desc: `考勤管理 · 风险等级 ${item.level}`,
+      path: '/admin/attendance/abnormal',
+      buttonText: '前往处理'
+    })
+  })
+  return items.slice(0, 4)
+})
 
 const quickActions = [
-  { text: '新增课程', tone: 'primary' },
-  { text: '添加用户', tone: 'soft-blue' },
-  { text: '导出报表', tone: 'soft-gray' },
-  { text: '发送公告', tone: 'soft-gray' }
+  { text: '新增课程', tone: 'primary', path: '/admin/course' },
+  { text: '添加用户', tone: 'soft-blue', path: '/admin/user' },
+  { text: '财务统计', tone: 'soft-gray', path: '/admin/finance' },
+  { text: '考勤管理', tone: 'soft-gray', path: '/admin/attendance' }
 ]
 
 const revenuePath = computed(() => {
   const width = 592
   const height = 210
-  const max = Math.max(...revenuePoints)
-  const min = Math.min(...revenuePoints)
+  if (!revenuePoints.value.length) return ''
+  const max = Math.max(...revenuePoints.value)
+  const min = Math.min(...revenuePoints.value)
   const span = max - min || 1
 
-  return revenuePoints
+  return revenuePoints.value
     .map((v, index) => {
-      const x = (index / (revenuePoints.length - 1)) * width
+      const x = revenuePoints.value.length === 1 ? width / 2 : (index / (revenuePoints.value.length - 1)) * width
       const y = height - ((v - min) / span) * (height - 24) - 6
       return `${x.toFixed(2)},${y.toFixed(2)}`
     })
     .join(' ')
 })
+
+async function loadDashboard() {
+  loading.value = true
+  try {
+    const [users, courses, classes, bills, attendance] = await Promise.all([
+      fetchAdminUserPage({ pageNum: 1, pageSize: 300 }),
+      fetchAdminCoursePage({ pageNum: 1, pageSize: 300 }),
+      fetchAdminClassPage({ pageNum: 1, pageSize: 300 }),
+      fetchAdminBillPage({ pageNum: 1, pageSize: 300 }),
+      fetchAdminAttendanceOverview()
+    ])
+    userRows.value = users.list
+    courseRows.value = courses.list
+    classRows.value = classes.list
+    billRows.value = bills.list
+    attendanceOverview.value = attendance
+  } catch (error) {
+    ElMessage.error(error.message || '仪表盘加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function goAction(path) {
+  router.push(path)
+}
+
+function openActivity(path) {
+  if (!path) return
+  router.push(path)
+}
+
+onMounted(() => {
+  loadDashboard()
+})
 </script>
 
 <template>
-  <div class="dashboard">
+  <div v-loading="loading" class="dashboard">
     <section class="welcome">
       <h1 class="welcome__title">概览工作台</h1>
-      <p class="welcome__subtitle">欢迎回来，这是您今日的数据分析与教学简报。</p>
+      <p class="welcome__subtitle">欢迎回来，这是您当前真实业务数据的概览面板。</p>
     </section>
 
     <section class="stats-grid">
@@ -75,7 +179,7 @@ const revenuePath = computed(() => {
     <section class="charts-row">
       <article class="panel panel--revenue">
         <header class="panel__head">
-          <h2 class="panel__title">收入趋势图</h2>
+          <h2 class="panel__title">到课率趋势图</h2>
           <span class="panel__tag">最近 7 天</span>
         </header>
         <div class="chart-area">
@@ -86,8 +190,8 @@ const revenuePath = computed(() => {
                 <stop offset="100%" stop-color="#005DAA" stop-opacity="0" />
               </linearGradient>
             </defs>
-            <polygon :points="`0,242 ${revenuePath} 592,242`" fill="url(#lineFill)" />
-            <polyline :points="revenuePath" fill="none" stroke="#005DAA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+            <polygon v-if="revenuePath" :points="`0,242 ${revenuePath} 592,242`" fill="url(#lineFill)" />
+            <polyline v-if="revenuePath" :points="revenuePath" fill="none" stroke="#005DAA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
           <div class="chart-axis">
             <span v-for="day in weekLabels" :key="day">{{ day }}</span>
@@ -97,7 +201,7 @@ const revenuePath = computed(() => {
 
       <article class="panel panel--enroll">
         <header class="panel__head panel__head--single">
-          <h2 class="panel__title">报名人数趋势</h2>
+          <h2 class="panel__title">用户结构占比</h2>
         </header>
         <div class="enroll-list">
           <div v-for="row in enrollTrend" :key="row.label" class="enroll-item">
@@ -125,7 +229,9 @@ const revenuePath = computed(() => {
               <p class="activity-item__title">{{ item.title }}</p>
               <p class="activity-item__desc">{{ item.desc }}</p>
             </div>
-            <el-button link type="primary" class="activity-item__action">{{ item.action }}</el-button>
+            <el-button link type="primary" class="activity-item__link" @click="openActivity(item.path)">
+              {{ item.buttonText }}
+            </el-button>
           </div>
         </div>
       </article>
@@ -141,6 +247,7 @@ const revenuePath = computed(() => {
             type="button"
             class="quick-btn"
             :class="`quick-btn--${action.tone}`"
+            @click="goAction(action.path)"
           >
             <span class="quick-btn__icon"></span>
             <span>{{ action.text }}</span>
@@ -407,7 +514,7 @@ const revenuePath = computed(() => {
   line-height: 20px;
 }
 
-.activity-item__action {
+.activity-item__link {
   font-size: 12px;
   font-weight: 700;
 }

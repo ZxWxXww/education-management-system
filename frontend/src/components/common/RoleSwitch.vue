@@ -1,10 +1,14 @@
 <script setup>
 import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
+import { switchRole as switchRoleApi } from '../../api/auth'
 import { Avatar, SwitchButton, User, School } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const switching = ref(false)
 
 const roleOptions = [
   { label: '管理员', value: 'admin', icon: Avatar },
@@ -18,14 +22,30 @@ const roleHomePathMap = {
   student: '/student/learning-center'
 }
 
-function switchRole(role) {
+const switchableRoles = computed(() =>
+  roleOptions.filter(
+    (role) => userStore.availableRoleValues.includes(role.value) && role.value !== userStore.role
+  )
+)
+
+async function switchRole(role) {
   if (role === userStore.role) return
   
-  // 更新用户角色
-  userStore.setRole(role)
-  
-  // 跳转到对应角色的首页
-  router.push(roleHomePathMap[role])
+  if (!userStore.availableRoleValues.includes(role)) {
+    ElMessage.warning('当前账号未分配该角色，不能切换')
+    return
+  }
+
+  switching.value = true
+  try {
+    const loginData = await switchRoleApi({ role })
+    userStore.setLoginInfo(loginData)
+    router.push(roleHomePathMap[userStore.role] || '/login')
+  } catch (error) {
+    ElMessage.error(error.message || '角色切换失败')
+  } finally {
+    switching.value = false
+  }
 }
 
 function logout() {
@@ -42,6 +62,7 @@ function logout() {
       circle 
       :icon="SwitchButton"
       size="small"
+      :loading="switching"
     />
     <template #dropdown>
       <el-dropdown-menu>
@@ -55,7 +76,7 @@ function logout() {
           <span class="switch-title">切换角色</span>
         </el-dropdown-item>
         <el-dropdown-item 
-          v-for="role in roleOptions.filter(r => r.value !== userStore.role)"
+          v-for="role in switchableRoles"
           :key="role.value"
           @click="switchRole(role.value)"
         >
@@ -63,6 +84,9 @@ function logout() {
             <el-icon><component :is="role.icon" /></el-icon>
             <span>{{ role.label }}</span>
           </div>
+        </el-dropdown-item>
+        <el-dropdown-item v-if="!switchableRoles.length" disabled>
+          <span class="switch-empty">当前账号暂无其他可切换角色</span>
         </el-dropdown-item>
         <el-dropdown-item divided @click="logout">
           <div class="logout-item">
@@ -90,6 +114,11 @@ function logout() {
   font-weight: 500;
 }
 
+.switch-empty {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
 .role-item {
   display: flex;
   align-items: center;
@@ -109,6 +138,10 @@ function logout() {
 }
 
 :global(html.dark) .switch-title {
+  color: #6b7280;
+}
+
+:global(html.dark) .switch-empty {
   color: #6b7280;
 }
 

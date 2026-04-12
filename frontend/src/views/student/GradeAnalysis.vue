@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   DataAnalysis,
   DocumentChecked,
@@ -10,74 +11,28 @@ import {
 } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
 import StatisticCard from '../../components/common/StatisticCard.vue'
+import { fetchCurrentStudentProfile } from '../../api/student/profile'
+import { fetchStudentScorePage } from '../../api/student/score'
+import { SCORE_PUBLISH_STATUS } from '../../constants/status'
 
-// 学生端“学习统计-成绩分析”Mock 数据
-// 切换真实后端时，请替换为 src/api/student/gradeAnalysis.js 接口返回
-const gradeAnalysisMock = ref({
+const gradeAnalysis = ref({
   profile: {
-    studentNo: 'S20260318',
-    studentName: '李明',
-    gradeClass: '高二（3）班',
-    semester: '2025-2026 学年第二学期',
-    homeroomTeacher: '张老师',
-    created_at: '2026-02-18 09:20:00',
-    updated_at: '2026-04-06 11:30:00'
+    studentNo: '-',
+    studentName: '',
+    gradeClass: '',
+    updatedAt: '-'
   },
   summary: {
-    overallAverage: 88.7,
-    classRanking: 8,
-    bestSubject: '数学',
-    scoreGrowthRate: 5.4,
-    created_at: '2026-04-06 11:30:00',
-    updated_at: '2026-04-06 11:30:00'
+    overallAverage: 0,
+    publishedExamCount: 0,
+    bestSubject: '-',
+    scoreGrowthRate: 0,
+    latestRankInClass: '-'
   },
-  subjectStats: [
-    { subject: '语文', averageScore: 86.2, classAverage: 82.5, created_at: '2026-04-06 11:30:00', updated_at: '2026-04-06 11:30:00' },
-    { subject: '数学', averageScore: 93.4, classAverage: 84.1, created_at: '2026-04-06 11:30:00', updated_at: '2026-04-06 11:30:00' },
-    { subject: '英语', averageScore: 88.9, classAverage: 83.6, created_at: '2026-04-06 11:30:00', updated_at: '2026-04-06 11:30:00' },
-    { subject: '物理', averageScore: 84.6, classAverage: 80.3, created_at: '2026-04-06 11:30:00', updated_at: '2026-04-06 11:30:00' },
-    { subject: '化学', averageScore: 90.1, classAverage: 82.8, created_at: '2026-04-06 11:30:00', updated_at: '2026-04-06 11:30:00' },
-    { subject: '生物', averageScore: 89.4, classAverage: 83.1, created_at: '2026-04-06 11:30:00', updated_at: '2026-04-06 11:30:00' }
-  ],
-  examRecords: [
-    {
-      id: 1,
-      examName: '三月月考',
-      examType: '月考',
-      examDate: '2026-03-26',
-      totalScore: 525,
-      classRank: 12,
-      gradeRank: 58,
-      growthValue: 0,
-      created_at: '2026-03-26 18:30:00',
-      updated_at: '2026-03-26 18:30:00'
-    },
-    {
-      id: 2,
-      examName: '期中模拟',
-      examType: '模拟考',
-      examDate: '2026-04-02',
-      totalScore: 541,
-      classRank: 9,
-      gradeRank: 43,
-      growthValue: 16,
-      created_at: '2026-04-02 17:50:00',
-      updated_at: '2026-04-02 17:50:00'
-    },
-    {
-      id: 3,
-      examName: '四月阶段测',
-      examType: '阶段测',
-      examDate: '2026-04-05',
-      totalScore: 552,
-      classRank: 8,
-      gradeRank: 39,
-      growthValue: 11,
-      created_at: '2026-04-05 20:15:00',
-      updated_at: '2026-04-05 20:15:00'
-    }
-  ]
+  subjectStats: [],
+  examRecords: []
 })
+const loading = ref(false)
 
 const queryForm = ref({
   examType: '',
@@ -92,42 +47,42 @@ const summaryCards = computed(() => [
   {
     key: 'overallAverage',
     title: '综合均分',
-    value: `${gradeAnalysisMock.value.summary.overallAverage}`,
-    desc: '最近 3 次考试',
+    value: `${gradeAnalysis.value.summary.overallAverage}`,
+    desc: '基于真实成绩记录',
     icon: DataAnalysis,
     tone: 'blue'
   },
   {
-    key: 'classRanking',
-    title: '班级排名',
-    value: `第 ${gradeAnalysisMock.value.summary.classRanking} 名`,
-    desc: '当前学期',
+    key: 'publishedExamCount',
+    title: '已发布考试',
+    value: `${gradeAnalysis.value.summary.publishedExamCount} 次`,
+    desc: '仅统计已发布记录',
     icon: DocumentChecked,
     tone: 'green'
   },
   {
     key: 'bestSubject',
     title: '优势学科',
-    value: gradeAnalysisMock.value.summary.bestSubject,
-    desc: '按最近一次考试',
+    value: gradeAnalysis.value.summary.bestSubject,
+    desc: '按学科均分计算',
     icon: Histogram,
     tone: 'purple'
   },
   {
     key: 'scoreGrowthRate',
     title: '分数增长率',
-    value: `+${gradeAnalysisMock.value.summary.scoreGrowthRate}%`,
-    desc: '较上阶段',
+    value: `${gradeAnalysis.value.summary.scoreGrowthRate > 0 ? '+' : ''}${gradeAnalysis.value.summary.scoreGrowthRate}%`,
+    desc: `最近排名 ${gradeAnalysis.value.summary.latestRankInClass}`,
     icon: TrendCharts,
     tone: 'orange'
   }
 ])
 
-const examTypeOptions = computed(() => [...new Set(gradeAnalysisMock.value.examRecords.map((item) => item.examType))])
+const examTypeOptions = computed(() => [...new Set(gradeAnalysis.value.examRecords.map((item) => item.examType))])
 
 const filteredRecords = computed(() => {
   const keyword = queryForm.value.keyword.trim()
-  return gradeAnalysisMock.value.examRecords.filter((item) => {
+  return gradeAnalysis.value.examRecords.filter((item) => {
     const matchType = queryForm.value.examType ? item.examType === queryForm.value.examType : true
     const matchKeyword = keyword ? item.examName.includes(keyword) : true
     return matchType && matchKeyword
@@ -135,12 +90,12 @@ const filteredRecords = computed(() => {
 })
 
 const scoreTrendPoints = computed(() => {
-  const source = filteredRecords.value.length > 0 ? filteredRecords.value : gradeAnalysisMock.value.examRecords
+  const source = filteredRecords.value.length > 0 ? filteredRecords.value : gradeAnalysis.value.examRecords
   return buildLinePoints(source.map((item) => item.totalScore))
 })
 
 const chartLabels = computed(() => {
-  const source = filteredRecords.value.length > 0 ? filteredRecords.value : gradeAnalysisMock.value.examRecords
+  const source = filteredRecords.value.length > 0 ? filteredRecords.value : gradeAnalysis.value.examRecords
   return source.map((item) => item.examName)
 })
 
@@ -177,20 +132,105 @@ function resetFilters() {
   queryForm.value.examType = ''
   queryForm.value.keyword = ''
 }
+
+function inferExamType(examName) {
+  if (!examName) return '考试'
+  if (examName.includes('月考')) return '月考'
+  if (examName.includes('模拟')) return '模拟考'
+  if (examName.includes('阶段')) return '阶段测'
+  return '考试'
+}
+
+async function loadGradeAnalysis() {
+  loading.value = true
+  try {
+    const [profile, page] = await Promise.all([
+      fetchCurrentStudentProfile(),
+      fetchStudentScorePage({ pageNum: 1, pageSize: 200 })
+    ])
+    const records = page.list
+    const groupedExam = Object.values(records.reduce((acc, item) => {
+      const key = item.examName || item.examId || item.id
+      if (!acc[key]) {
+        acc[key] = {
+          id: item.examId || item.id,
+          examName: item.examName,
+          examType: inferExamType(item.examName),
+          examDate: (item.examTime || item.publishTime || '').slice(0, 10),
+          totalScore: 0,
+          classRank: item.rankInClass || '-',
+          publishStatus: item.examStatusLabel,
+          growthValue: 0,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt
+        }
+      }
+      acc[key].totalScore += Number(item.score || 0)
+      return acc
+    }, {}))
+      .sort((a, b) => String(a.examDate).localeCompare(String(b.examDate)))
+      .map((item, index, arr) => ({
+        ...item,
+        growthValue: index === 0 ? 0 : Number((item.totalScore - arr[index - 1].totalScore).toFixed(1))
+      }))
+
+    const subjectStats = records.reduce((acc, item) => {
+      const key = item.courseName || '未分类'
+      if (!acc[key]) {
+        acc[key] = { subject: key, averageScore: 0, count: 0 }
+      }
+      acc[key].averageScore += Number(item.score || 0)
+      acc[key].count += 1
+      return acc
+    }, {})
+    const subjectList = Object.values(subjectStats).map((item) => ({
+      subject: item.subject,
+      averageScore: Number((item.averageScore / (item.count || 1)).toFixed(1))
+    }))
+    const overallAverage = records.length
+      ? Number((records.reduce((sum, item) => sum + Number(item.score || 0), 0) / records.length).toFixed(1))
+      : 0
+    const bestSubject = [...subjectList].sort((a, b) => b.averageScore - a.averageScore)[0]?.subject || '-'
+    gradeAnalysis.value = {
+      profile: {
+        studentNo: profile.studentNo || '-',
+        studentName: profile.name || '',
+        gradeClass: profile.className || '',
+        updatedAt: profile.updatedAt || '-'
+      },
+      summary: {
+        overallAverage,
+        publishedExamCount: new Set(records.filter((item) => item.examStatusCode === SCORE_PUBLISH_STATUS.PUBLISHED).map((item) => item.examName)).size,
+        bestSubject,
+        scoreGrowthRate: groupedExam.length > 1 && groupedExam[0].totalScore
+          ? Number((((groupedExam[groupedExam.length - 1].totalScore - groupedExam[0].totalScore) / groupedExam[0].totalScore) * 100).toFixed(1))
+          : 0,
+        latestRankInClass: records[0]?.rankInClass ? `第 ${records[0].rankInClass} 名` : '-'
+      },
+      subjectStats: subjectList,
+      examRecords: groupedExam
+    }
+  } catch (error) {
+    ElMessage.error('成绩分析加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadGradeAnalysis()
+})
 </script>
 
 <template>
   <PageShell title="成绩分析" subtitle="学习统计 / 成绩分析">
     <div class="grade-analysis-page">
-      <el-card shadow="never" class="profile-card">
+      <el-card v-loading="loading" shadow="never" class="profile-card">
         <div class="profile-title">
-          {{ gradeAnalysisMock.profile.studentName }}，这是你本学期的成绩分析结果
+          {{ gradeAnalysis.profile.studentName }}，这是你的成绩分析结果
         </div>
         <div class="profile-meta">
-          学号：{{ gradeAnalysisMock.profile.studentNo }} ｜ 班级：{{ gradeAnalysisMock.profile.gradeClass }} ｜ 学期：{{ gradeAnalysisMock.profile.semester }}
-        </div>
-        <div class="profile-meta">
-          班主任：{{ gradeAnalysisMock.profile.homeroomTeacher }} ｜ 最近更新时间：{{ gradeAnalysisMock.profile.updated_at }}
+          学号：{{ gradeAnalysis.profile.studentNo }} ｜ 班级：{{ gradeAnalysis.profile.gradeClass }} ｜ 最近更新时间：{{ gradeAnalysis.profile.updatedAt }}
         </div>
       </el-card>
 
@@ -231,7 +271,7 @@ function resetFilters() {
 
       <el-row :gutter="16">
         <el-col :xs="24" :sm="24" :md="24" :lg="14" :xl="14">
-          <el-card shadow="never" class="panel-card">
+          <el-card v-loading="loading" shadow="never" class="panel-card">
             <template #header>
               <div class="panel-header">总分趋势</div>
             </template>
@@ -261,15 +301,15 @@ function resetFilters() {
         </el-col>
 
         <el-col :xs="24" :sm="24" :md="24" :lg="10" :xl="10">
-          <el-card shadow="never" class="panel-card">
+          <el-card v-loading="loading" shadow="never" class="panel-card">
             <template #header>
               <div class="panel-header">学科对比</div>
             </template>
             <div class="subject-list">
-              <div v-for="item in gradeAnalysisMock.subjectStats" :key="item.subject" class="subject-item">
+              <div v-for="item in gradeAnalysis.subjectStats" :key="item.subject" class="subject-item">
                 <div class="subject-head">
                   <span>{{ item.subject }}</span>
-                  <span>{{ item.averageScore }} / 班均 {{ item.classAverage }}</span>
+                  <span>{{ item.averageScore }} 分</span>
                 </div>
                 <el-progress :percentage="item.averageScore" :stroke-width="10" :show-text="false" />
               </div>
@@ -278,7 +318,7 @@ function resetFilters() {
         </el-col>
       </el-row>
 
-      <el-card shadow="never" class="panel-card">
+      <el-card v-loading="loading" shadow="never" class="panel-card">
         <template #header>
           <div class="panel-header">考试记录</div>
         </template>
@@ -288,7 +328,7 @@ function resetFilters() {
           <el-table-column prop="examDate" label="考试日期" width="120" />
           <el-table-column prop="totalScore" label="总分" width="100" />
           <el-table-column prop="classRank" label="班级排名" width="100" />
-          <el-table-column prop="gradeRank" label="年级排名" width="100" />
+          <el-table-column prop="publishStatus" label="发布状态" width="100" />
           <el-table-column label="分数波动" width="110">
             <template #default="{ row }">
               <el-tag :type="getGrowthTagType(row.growthValue)" effect="plain">
@@ -296,8 +336,8 @@ function resetFilters() {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="created_at" label="created_at" min-width="170" />
-          <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+          <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+          <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
         </el-table>
       </el-card>
     </div>

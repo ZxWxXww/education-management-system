@@ -1,0 +1,115 @@
+{
+  "name": "edusmart-manager-plugin",
+  "version": "1.0.0",
+  "description": "教培智管系统 Codex 插件包 - 完整的教培管理系统解决方案",
+  "author": "EduSmart Team",
+  "codex_version": "1.0.0",
+  "type": "full_stack_education_management",
+  "categories": ["education", "management", "vue", "spring-boot", "mysql"],
+  "tags": ["教培系统", "学生管理", "课程管理", "成绩管理", "考勤管理"],
+  "compatibility": {
+    "minimum_codex_version": "1.0.0",
+    "maximum_codex_version": "2.0.0"
+  },
+  "requirements": {
+    "node_version": ">=18.0.0",
+    "java_version": ">=17",
+    "maven_version": ">=3.8.0",
+    "mysql_version": ">=8.0"
+  },
+  "features": {
+    "frontend": {
+      "framework": "Vue 3 + Vite",
+      "ui_library": "Element Plus",
+      "state_management": "Pinia",
+      "routing": "Vue Router",
+      "http_client": "Axios",
+      "build_tool": "Vite",
+      "dark_mode": true,
+      "responsive": true
+    },
+    "backend": {
+      "framework": "Spring Boot 3",
+      "java_version": "17",
+      "orm": "MyBatis-Plus",
+      "security": "Spring Security + JWT",
+      "database": "MySQL 8",
+      "validation": "Spring Validation"
+    },
+    "management": {
+      "multi_role": ["管理员", "教师", "学生"],
+      "menu_system": "三级可折叠菜单",
+      "permission_control": "RBAC权限控制",
+      "file_upload": "图片和文档",
+      "data_export": "支持多种格式"
+    }
+  },
+  "modules": {
+    "admin": {
+      "dashboard": "仪表盘",
+      "user_management": "用户管理",
+      "role_permission": "角色权限管理",
+      "course_management": "课程管理",
+      "class_management": "班级管理",
+      "assignment_management": "作业管理",
+      "grade_management": "成绩管理",
+      "attendance_management": "考勤管理",
+      "abnormal_attendance": "异常考勤",
+      "financial_statistics": "财务统计",
+      "bill_management": "财单管理",
+      "data_reports": "数据报表",
+      "comparative_analysis": "对比分析",
+      "institution_settings": "机构设置",
+      "log_management": "日志管理",
+      "display_settings": "展示设置"
+    },
+    "teacher": {
+      "workbench": "教师工作台",
+      "my_courses": "我的课程",
+      "class_details": "班级详情",
+      "class_management": "班级管理",
+      "teaching_resources": "教学资源",
+      "assignment_management": "作业管理",
+      "grade_management": "成绩管理",
+      "attendance_records": "考勤记录",
+      "abnormal_attendance": "异常考勤",
+      "teaching_data": "教学数据",
+      "grade_analysis": "成绩分析",
+      "personal_info": "个人信息",
+      "password_change": "修改密码"
+    },
+    "student": {
+      "learning_center": "学生学习中心",
+      "course_list": "课程列表",
+      "class_info": "班级信息",
+      "my_assignments": "我的作业",
+      "exam_scores": "考试成绩",
+      "my_attendance": "我的考勤",
+      "attendance_anomaly": "考勤异常",
+      "learning_statistics": "学习统计",
+      "grade_analysis": "成绩分析",
+      "personal_info": "个人信息",
+      "password_change": "修改密码"
+    }
+  },
+  "database": {
+    "schema_version": "1.0.0",
+    "tables": [
+      "用户表", "角色表", "权限表", "课程表", "班级表", 
+      "作业表", "成绩表", "考勤表", "财务表", "日志表"
+    ],
+    "initial_data": "包含完整的权限种子数据"
+  },
+  "api_documentation": {
+    "format": "RESTful",
+    "authentication": "JWT Bearer Token",
+    "response_format": "{ code: number, message: string, data: any }",
+    "pagination": "{ current, size, total, records }"
+  },
+  "installation": {
+    "type": "full_stack",
+    "estimated_time": "30-60分钟",
+    "difficulty": "中等",
+    "prerequisites": ["Node.js环境", "Java环境", "MySQL数据库"]
+  }
+}

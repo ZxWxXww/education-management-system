@@ -1,71 +1,19 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { Calendar, Clock, Document, Plus, RefreshRight, Search, Upload } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Clock, Document, RefreshRight, Search } from '@element-plus/icons-vue'
+import { fetchTeacherAssignmentPage } from '../../api/teacher/assignment'
 
-// 教师端作业管理 Mock 数据（接入后端时替换为 src/api/teacher/assignment.js）
 const filterForm = ref({
   keyword: '',
   className: '全部班级',
   status: '全部状态'
 })
 
-const classOptions = ['全部班级', '高二（3）班', '高二（6）班', '竞赛1班', '高一（2）班']
+const loading = ref(false)
+const assignmentList = ref([])
+const classOptions = computed(() => ['全部班级', ...new Set(assignmentList.value.map((item) => item.className).filter(Boolean))])
 const statusOptions = ['全部状态', '待发布', '进行中', '已截止']
-
-const assignmentList = ref([
-  {
-    assignmentId: 'T-A-2026040601',
-    title: '函数与导数综合训练（第 4 讲）',
-    className: '高二（3）班',
-    publishTime: '2026-04-06 10:20',
-    deadline: '2026-04-09 23:00',
-    status: '进行中',
-    submitted: 41,
-    total: 45,
-    avgDuration: '34 分钟',
-    created_at: '2026-04-06 10:20:00',
-    updated_at: '2026-04-06 10:20:00'
-  },
-  {
-    assignmentId: 'T-A-2026040402',
-    title: '三角函数图像随堂练习',
-    className: '高二（6）班',
-    publishTime: '2026-04-04 18:30',
-    deadline: '2026-04-07 22:00',
-    status: '进行中',
-    submitted: 38,
-    total: 44,
-    avgDuration: '29 分钟',
-    created_at: '2026-04-04 18:30:00',
-    updated_at: '2026-04-05 08:12:00'
-  },
-  {
-    assignmentId: 'T-A-2026040303',
-    title: '竞赛班不等式证明专题',
-    className: '竞赛1班',
-    publishTime: '2026-04-03 19:10',
-    deadline: '2026-04-06 20:30',
-    status: '已截止',
-    submitted: 26,
-    total: 28,
-    avgDuration: '47 分钟',
-    created_at: '2026-04-03 19:10:00',
-    updated_at: '2026-04-06 20:31:00'
-  },
-  {
-    assignmentId: 'T-A-2026040704',
-    title: '数列单元基础检测（预告）',
-    className: '高一（2）班',
-    publishTime: '2026-04-07 08:00',
-    deadline: '2026-04-11 21:00',
-    status: '待发布',
-    submitted: 0,
-    total: 42,
-    avgDuration: '--',
-    created_at: '2026-04-07 08:00:00',
-    updated_at: '2026-04-07 08:00:00'
-  }
-])
 
 const filteredAssignments = computed(() =>
   assignmentList.value.filter((item) => {
@@ -79,25 +27,26 @@ const filteredAssignments = computed(() =>
 )
 
 const dashboardCards = computed(() => {
-  const total = assignmentList.value.length
-  const running = assignmentList.value.filter((item) => item.status === '进行中').length
-  const pending = assignmentList.value.filter((item) => item.status === '待发布').length
+  const visibleAssignments = filteredAssignments.value
+  const total = visibleAssignments.length
+  const running = visibleAssignments.filter((item) => item.status === '进行中').length
+  const pending = visibleAssignments.filter((item) => item.status === '待发布').length
   const submitRate = Math.round(
-    (assignmentList.value.reduce((sum, item) => sum + item.submitted, 0) /
-      assignmentList.value.reduce((sum, item) => sum + item.total, 0)) *
+    (visibleAssignments.reduce((sum, item) => sum + item.submitted, 0) /
+      visibleAssignments.reduce((sum, item) => sum + item.total, 0)) *
       100
   )
 
   return [
-    { label: '作业总数', value: `${total}`, desc: '当前学周' },
-    { label: '进行中', value: `${running}`, desc: '需跟进批改' },
-    { label: '待发布', value: `${pending}`, desc: '可一键发布' },
-    { label: '整体提交率', value: `${Number.isFinite(submitRate) ? submitRate : 0}%`, desc: '全部班级' }
+    { label: '当前筛选作业', value: `${total}`, desc: '按筛选结果统计' },
+    { label: '当前筛选进行中', value: `${running}`, desc: '按筛选结果统计' },
+    { label: '当前筛选待发布', value: `${pending}`, desc: '草稿状态' },
+    { label: '整体提交率', value: `${Number.isFinite(submitRate) ? submitRate : 0}%`, desc: '按筛选结果统计' }
   ]
 })
 
 const upcomingList = computed(() =>
-  [...assignmentList.value]
+  [...filteredAssignments.value]
     .filter((item) => item.status !== '已截止')
     .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
     .slice(0, 3)
@@ -118,7 +67,28 @@ function resetFilters() {
   filterForm.value.keyword = ''
   filterForm.value.className = '全部班级'
   filterForm.value.status = '全部状态'
+  loadAssignments()
 }
+
+async function loadAssignments() {
+  loading.value = true
+  try {
+    const page = await fetchTeacherAssignmentPage({
+      pageNum: 1,
+      pageSize: 100,
+      keyword: filterForm.value.keyword
+    })
+    assignmentList.value = page.list
+  } catch (error) {
+    ElMessage.error('作业数据加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadAssignments()
+})
 </script>
 
 <template>
@@ -130,14 +100,7 @@ function resetFilters() {
         <p class="hero__desc">统一管理班级作业发布、提交进度与批改安排</p>
       </div>
       <div class="hero__actions">
-        <el-button class="hero-btn" plain>
-          <el-icon><Calendar /></el-icon>
-          <span>作业日历</span>
-        </el-button>
-        <el-button class="hero-btn hero-btn--primary" type="primary">
-          <el-icon><Plus /></el-icon>
-          <span>发布作业</span>
-        </el-button>
+        <el-tag type="info" effect="dark">仅展示真实作业列表与提交率</el-tag>
       </div>
     </section>
 
@@ -165,19 +128,19 @@ function resetFilters() {
           </el-select>
         </div>
         <div class="toolbar__right">
+          <el-button class="panel-btn" type="primary" @click="loadAssignments">
+            <el-icon><Search /></el-icon>
+            <span>查询</span>
+          </el-button>
           <el-button class="panel-btn" @click="resetFilters">
             <el-icon><RefreshRight /></el-icon>
             <span>重置</span>
-          </el-button>
-          <el-button class="panel-btn">
-            <el-icon><Upload /></el-icon>
-            <span>导出</span>
           </el-button>
         </div>
       </header>
 
       <div class="content-grid">
-        <article class="table-wrap">
+        <article v-loading="loading" class="table-wrap">
           <el-table :data="filteredAssignments" stripe>
             <el-table-column prop="assignmentId" label="作业编号" min-width="150" />
             <el-table-column prop="title" label="作业标题" min-width="220" show-overflow-tooltip />
@@ -192,14 +155,13 @@ function resetFilters() {
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="avgDuration" label="平均耗时" min-width="90" />
             <el-table-column label="状态" width="90">
               <template #default="{ row }">
                 <el-tag :type="assignmentStatusType(row.status)" effect="light">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="created_at" min-width="170" />
-            <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+            <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+            <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
           </el-table>
         </article>
 
@@ -214,8 +176,8 @@ function resetFilters() {
             </div>
           </article>
           <article class="mini-card">
-            <h3><el-icon><Document /></el-icon> Mock / API 切换</h3>
-            <p>当前页面数据来自本地 mock。接入后端时，将 assignmentList 替换为 src/api/teacher/assignment.js 的接口结果。</p>
+            <h3><el-icon><Document /></el-icon> 当前接口说明</h3>
+            <p>当前页面仅展示后端已提供的真实作业列表、状态、截止时间和提交率字段。</p>
           </article>
         </aside>
       </div>

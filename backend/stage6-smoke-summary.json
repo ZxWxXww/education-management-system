@@ -1,0 +1,10 @@
+﻿{
+    "healthCode":  0,
+    "loginCode":  0,
+    "activeRole":  "admin",
+    "permissionCount":  38,
+    "orderFirst":  "OD2026041228930:UNPAID:PENDING",
+    "billFirst":  "BL2026041228936:5:PENDING:0.00",
+    "bill6PaymentsCount":  3,
+    "bill6LastPayNo":  "PY2026041227331"
+}

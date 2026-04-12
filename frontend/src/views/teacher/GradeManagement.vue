@@ -1,67 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { DataAnalysis, DocumentChecked, Download, Plus, RefreshRight, Search, Tickets } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { DataAnalysis, DocumentChecked, RefreshRight, Search, Tickets } from '@element-plus/icons-vue'
+import { fetchTeacherScorePage } from '../../api/teacher/score'
 
-// 教师端成绩管理 Mock 数据（接入后端时替换为 src/api/teacher/grade.js）
 const searchForm = ref({
   keyword: '',
   className: '全部班级',
   scoreRange: '全部分段'
 })
 
-const classOptions = ['全部班级', '高二（3）班', '高二（6）班', '竞赛1班', '高一（2）班']
+const router = useRouter()
+const loading = ref(false)
+const classOptions = computed(() => ['全部班级', ...new Set(gradeList.value.map((item) => item.className).filter(Boolean))])
 const scoreRangeOptions = ['全部分段', '90-100', '80-89', '60-79', '0-59']
-
-const gradeList = ref([
-  {
-    gradeId: 'T-G-20260406-001',
-    className: '高二（3）班',
-    studentName: '张若琳',
-    studentNo: 'S202402031',
-    assignmentName: '函数与导数综合训练（第 4 讲）',
-    score: 93,
-    rank: 3,
-    comment: '计算步骤完整',
-    created_at: '2026-04-06 20:12:00',
-    updated_at: '2026-04-06 21:05:00'
-  },
-  {
-    gradeId: 'T-G-20260406-002',
-    className: '高二（6）班',
-    studentName: '刘子恒',
-    studentNo: 'S202402066',
-    assignmentName: '三角函数图像随堂练习',
-    score: 86,
-    rank: 9,
-    comment: '审题准确，细节可提升',
-    created_at: '2026-04-06 19:40:00',
-    updated_at: '2026-04-06 20:14:00'
-  },
-  {
-    gradeId: 'T-G-20260406-003',
-    className: '竞赛1班',
-    studentName: '宋明哲',
-    studentNo: 'S202402108',
-    assignmentName: '竞赛班不等式证明专题',
-    score: 78,
-    rank: 15,
-    comment: '证明逻辑有待加强',
-    created_at: '2026-04-06 20:25:00',
-    updated_at: '2026-04-06 20:58:00'
-  },
-  {
-    gradeId: 'T-G-20260406-004',
-    className: '高一（2）班',
-    studentName: '林语晨',
-    studentNo: 'S202402142',
-    assignmentName: '数列基础检测',
-    score: 57,
-    rank: 34,
-    comment: '错题集中在通项求解',
-    created_at: '2026-04-06 17:15:00',
-    updated_at: '2026-04-06 18:43:00'
-  }
-])
+const gradeList = ref([])
 
 const filteredGrades = computed(() =>
   gradeList.value.filter((row) => {
@@ -70,7 +24,7 @@ const filteredGrades = computed(() =>
       !keyword ||
       row.studentName.includes(keyword) ||
       row.studentNo.includes(keyword) ||
-      row.assignmentName.includes(keyword)
+      row.examName.includes(keyword)
     const matchClass = searchForm.value.className === '全部班级' || row.className === searchForm.value.className
 
     if (searchForm.value.scoreRange === '全部分段') return matchKeyword && matchClass
@@ -131,11 +85,32 @@ function scoreTagType(score) {
   return 'danger'
 }
 
+function openGradeAnalysis() {
+  router.push('/teacher/data/grade-analysis')
+}
+
 function resetSearch() {
   searchForm.value.keyword = ''
   searchForm.value.className = '全部班级'
   searchForm.value.scoreRange = '全部分段'
+  loadScores()
 }
+
+async function loadScores() {
+  loading.value = true
+  try {
+    const page = await fetchTeacherScorePage({ pageNum: 1, pageSize: 200 })
+    gradeList.value = page.list
+  } catch (error) {
+    ElMessage.error('成绩数据加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadScores()
+})
 </script>
 
 <template>
@@ -147,13 +122,9 @@ function resetSearch() {
         <p class="hero__desc">录入与追踪班级成绩，快速查看分布与班级均分排名</p>
       </div>
       <div class="hero__actions">
-        <el-button class="hero-btn" plain>
+        <el-button class="hero-btn" plain @click="openGradeAnalysis">
           <el-icon><DataAnalysis /></el-icon>
           <span>成绩分析</span>
-        </el-button>
-        <el-button class="hero-btn hero-btn--primary" type="primary">
-          <el-icon><Plus /></el-icon>
-          <span>录入成绩</span>
         </el-button>
       </div>
     </section>
@@ -182,34 +153,34 @@ function resetSearch() {
           </el-select>
         </div>
         <div class="toolbar__right">
+          <el-button class="panel-btn" type="primary" @click="loadScores">
+            <el-icon><Search /></el-icon>
+            <span>查询</span>
+          </el-button>
           <el-button class="panel-btn" @click="resetSearch">
             <el-icon><RefreshRight /></el-icon>
             <span>重置</span>
-          </el-button>
-          <el-button class="panel-btn">
-            <el-icon><Download /></el-icon>
-            <span>导出</span>
           </el-button>
         </div>
       </header>
 
       <div class="content-grid">
-        <article class="table-wrap">
+        <article v-loading="loading" class="table-wrap">
           <el-table :data="filteredGrades" stripe>
-            <el-table-column prop="gradeId" label="记录编号" min-width="150" />
+            <el-table-column prop="scoreId" label="记录编号" min-width="150" />
             <el-table-column prop="className" label="班级" min-width="110" />
             <el-table-column prop="studentName" label="学员姓名" min-width="95" />
             <el-table-column prop="studentNo" label="学号" min-width="120" />
-            <el-table-column prop="assignmentName" label="作业名称" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="examName" label="考试名称" min-width="220" show-overflow-tooltip />
             <el-table-column label="分数" width="85">
               <template #default="{ row }">
                 <el-tag :type="scoreTagType(row.score)" effect="light">{{ row.score }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="rank" label="班级排名" width="95" />
-            <el-table-column prop="comment" label="教师评语" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="created_at" label="created_at" min-width="170" />
-            <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+            <el-table-column prop="rankInClass" label="班级排名" width="95" />
+            <el-table-column prop="teacherComment" label="教师评语" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+            <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
           </el-table>
         </article>
 
@@ -292,10 +263,6 @@ function resetSearch() {
 .hero-btn {
   height: 38px;
   border-radius: 10px;
-}
-
-.hero-btn--primary {
-  border: none;
 }
 
 .stats-grid {

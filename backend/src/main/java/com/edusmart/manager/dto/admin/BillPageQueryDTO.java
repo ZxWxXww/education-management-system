@@ -7,6 +7,7 @@ public class BillPageQueryDTO extends BasePageQueryDTO {
     private Long studentId;
     private String billType;
     private String status;
+    private String month;
 
     public String getKeyword() {
         return keyword;
@@ -38,5 +39,13 @@ public class BillPageQueryDTO extends BasePageQueryDTO {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getMonth() {
+        return month;
+    }
+
+    public void setMonth(String month) {
+        this.month = month;
     }
 }

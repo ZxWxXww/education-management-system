@@ -1,108 +1,28 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { DataAnalysis, DocumentChecked, Histogram, Notebook } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
+import { fetchCurrentStudentProfile } from '../../api/student/profile'
+import { fetchStudentScorePage } from '../../api/student/score'
+import { SCORE_PUBLISH_STATUS } from '../../constants/status'
 
-// 学生端“我的作业-考试成绩”Mock 数据
-// 切换真实后端时，请替换为 src/api/student/examScores.js 的接口返回
-const examScoresMock = ref({
+const scoreModule = ref({
   profile: {
-    studentNo: 'S20260318',
-    studentName: '李明',
-    gradeClass: '高二（3）班',
-    semester: '2025-2026 学年第二学期',
-    created_at: '2026-02-18 09:20:00',
-    updated_at: '2026-04-06 09:10:00'
+    studentNo: '-',
+    studentName: '',
+    gradeClass: '',
+    updatedAt: '-'
   },
   summary: {
-    examCount: 8,
-    averageScore: 88.6,
-    highestScore: 97,
-    passRate: 100,
-    created_at: '2026-04-06 09:10:00',
-    updated_at: '2026-04-06 09:10:00'
+    publishedExamCount: 0,
+    averageScore: 0,
+    highestScore: 0,
+    passRate: 0
   },
-  records: [
-    {
-      id: 1,
-      examName: '三月月考',
-      courseName: '数学',
-      score: 92,
-      fullScore: 100,
-      rankInClass: 6,
-      rankTrend: 'up',
-      publishTime: '2026-03-26 18:20:00',
-      teacherComment: '函数综合题思路清晰，压轴题计算可再优化。',
-      created_at: '2026-03-26 18:20:00',
-      updated_at: '2026-03-26 18:20:00'
-    },
-    {
-      id: 2,
-      examName: '三月月考',
-      courseName: '英语',
-      score: 89,
-      fullScore: 100,
-      rankInClass: 8,
-      rankTrend: 'stable',
-      publishTime: '2026-03-26 18:30:00',
-      teacherComment: '阅读理解保持稳定，作文可以增加高级句式。',
-      created_at: '2026-03-26 18:30:00',
-      updated_at: '2026-03-26 18:30:00'
-    },
-    {
-      id: 3,
-      examName: '三月月考',
-      courseName: '物理',
-      score: 84,
-      fullScore: 100,
-      rankInClass: 13,
-      rankTrend: 'down',
-      publishTime: '2026-03-26 18:35:00',
-      teacherComment: '电磁感应综合题丢分较多，建议加强错题复盘。',
-      created_at: '2026-03-26 18:35:00',
-      updated_at: '2026-03-26 18:35:00'
-    },
-    {
-      id: 4,
-      examName: '期中模拟',
-      courseName: '化学',
-      score: 91,
-      fullScore: 100,
-      rankInClass: 7,
-      rankTrend: 'up',
-      publishTime: '2026-04-02 17:10:00',
-      teacherComment: '有机推断题完成度高，注意规范书写。',
-      created_at: '2026-04-02 17:10:00',
-      updated_at: '2026-04-02 17:10:00'
-    },
-    {
-      id: 5,
-      examName: '期中模拟',
-      courseName: '语文',
-      score: 87,
-      fullScore: 100,
-      rankInClass: 11,
-      rankTrend: 'stable',
-      publishTime: '2026-04-02 17:30:00',
-      teacherComment: '现代文阅读表现较好，古诗文默写需加强。',
-      created_at: '2026-04-02 17:30:00',
-      updated_at: '2026-04-02 17:30:00'
-    },
-    {
-      id: 6,
-      examName: '期中模拟',
-      courseName: '生物',
-      score: 90,
-      fullScore: 100,
-      rankInClass: 9,
-      rankTrend: 'up',
-      publishTime: '2026-04-02 17:40:00',
-      teacherComment: '知识点掌握全面，图表分析速度再提升。',
-      created_at: '2026-04-02 17:40:00',
-      updated_at: '2026-04-02 17:40:00'
-    }
-  ]
+  records: []
 })
+const loading = ref(false)
 
 const queryForm = ref({
   examName: '',
@@ -112,33 +32,32 @@ const queryForm = ref({
 const detailVisible = ref(false)
 const currentRecord = ref(null)
 
-const examOptions = computed(() => [...new Set(examScoresMock.value.records.map((item) => item.examName))])
-const courseOptions = computed(() => [...new Set(examScoresMock.value.records.map((item) => item.courseName))])
+const examOptions = computed(() => [...new Set(scoreModule.value.records.map((item) => item.examName))])
+const courseOptions = computed(() => [...new Set(scoreModule.value.records.map((item) => item.courseName))])
 
 const summaryCards = computed(() => [
-  { key: 'examCount', title: '已发布考试', value: `${examScoresMock.value.summary.examCount} 次`, icon: Notebook, tone: 'blue' },
-  { key: 'averageScore', title: '综合均分', value: `${examScoresMock.value.summary.averageScore}`, icon: DataAnalysis, tone: 'green' },
-  { key: 'highestScore', title: '最高单科', value: `${examScoresMock.value.summary.highestScore}`, icon: Histogram, tone: 'purple' },
-  { key: 'passRate', title: '及格率', value: `${examScoresMock.value.summary.passRate}%`, icon: DocumentChecked, tone: 'orange' }
+  { key: 'publishedExamCount', title: '已发布考试', value: `${scoreModule.value.summary.publishedExamCount} 次`, icon: Notebook, tone: 'blue' },
+  { key: 'averageScore', title: '综合均分', value: `${scoreModule.value.summary.averageScore}`, icon: DataAnalysis, tone: 'green' },
+  { key: 'highestScore', title: '最高单科', value: `${scoreModule.value.summary.highestScore}`, icon: Histogram, tone: 'purple' },
+  { key: 'passRate', title: '及格率', value: `${scoreModule.value.summary.passRate}%`, icon: DocumentChecked, tone: 'orange' }
 ])
 
 const filteredRecords = computed(() =>
-  examScoresMock.value.records.filter((item) => {
+  scoreModule.value.records.filter((item) => {
     const matchExam = queryForm.value.examName ? item.examName === queryForm.value.examName : true
     const matchCourse = queryForm.value.courseName ? item.courseName === queryForm.value.courseName : true
     return matchExam && matchCourse
   })
 )
 
-const trendSummary = computed(() => {
-  const upCount = filteredRecords.value.filter((item) => item.rankTrend === 'up').length
-  const stableCount = filteredRecords.value.filter((item) => item.rankTrend === 'stable').length
-  const downCount = filteredRecords.value.filter((item) => item.rankTrend === 'down').length
-  const total = filteredRecords.value.length || 1
+const scoreBands = computed(() => {
+  const source = filteredRecords.value
+  const total = source.length || 1
   return {
-    up: Math.round((upCount / total) * 100),
-    stable: Math.round((stableCount / total) * 100),
-    down: Math.round((downCount / total) * 100)
+    excellent: Math.round((source.filter((item) => Number(item.score || 0) >= 90).length / total) * 100),
+    good: Math.round((source.filter((item) => Number(item.score || 0) >= 80 && Number(item.score || 0) < 90).length / total) * 100),
+    pass: Math.round((source.filter((item) => Number(item.score || 0) >= 60 && Number(item.score || 0) < 80).length / total) * 100),
+    fail: Math.round((source.filter((item) => Number(item.score || 0) < 60).length / total) * 100)
   }
 })
 
@@ -148,16 +67,8 @@ function getScoreTagType(score) {
   return 'danger'
 }
 
-function getTrendTagType(trend) {
-  if (trend === 'up') return 'success'
-  if (trend === 'stable') return 'info'
-  return 'danger'
-}
-
-function getTrendText(trend) {
-  if (trend === 'up') return '上升'
-  if (trend === 'stable') return '持平'
-  return '下降'
+function getPublishStatusType(status) {
+  return status === SCORE_PUBLISH_STATUS.PUBLISHED ? 'success' : 'info'
 }
 
 function openDetail(record) {
@@ -169,22 +80,63 @@ function resetFilters() {
   queryForm.value.examName = ''
   queryForm.value.courseName = ''
 }
+
+async function loadScores() {
+  loading.value = true
+  try {
+    const [profile, page] = await Promise.all([
+      fetchCurrentStudentProfile(),
+      fetchStudentScorePage({ pageNum: 1, pageSize: 200 })
+    ])
+    const records = page.list
+    const averageScore = records.length
+      ? Number((records.reduce((sum, item) => sum + Number(item.score || 0), 0) / records.length).toFixed(1))
+      : 0
+    const highestScore = records.length ? Math.max(...records.map((item) => Number(item.score || 0))) : 0
+    const passRate = records.length
+      ? Math.round((records.filter((item) => Number(item.score || 0) >= 60).length / records.length) * 100)
+      : 0
+    scoreModule.value = {
+      profile: {
+        studentNo: profile.studentNo || '-',
+        studentName: profile.name || '',
+        gradeClass: profile.className || '',
+        updatedAt: profile.updatedAt || '-'
+      },
+      summary: {
+        publishedExamCount: new Set(records.filter((item) => item.examStatusCode === SCORE_PUBLISH_STATUS.PUBLISHED).map((item) => item.examName)).size,
+        averageScore,
+        highestScore,
+        passRate
+      },
+      records
+    }
+  } catch (error) {
+    ElMessage.error('考试成绩加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadScores()
+})
 </script>
 
 <template>
   <PageShell title="考试成绩" subtitle="我的作业 / 考试成绩">
     <div class="exam-score-page">
-      <el-card shadow="never" class="profile-card">
+      <el-card v-loading="loading" shadow="never" class="profile-card">
         <div class="profile-head">
           <div class="profile-title">
-            {{ examScoresMock.profile.studentName }}，以下为你的考试成绩记录
+            {{ scoreModule.profile.studentName }}，以下为你的考试成绩记录
           </div>
           <div class="profile-meta">
-            学号：{{ examScoresMock.profile.studentNo }} ｜ 班级：{{ examScoresMock.profile.gradeClass }} ｜ 学期：{{ examScoresMock.profile.semester }}
+            学号：{{ scoreModule.profile.studentNo }} ｜ 班级：{{ scoreModule.profile.gradeClass }}
           </div>
         </div>
         <div class="profile-time">
-          最近更新时间：{{ examScoresMock.profile.updated_at }}
+          最近更新时间：{{ scoreModule.profile.updatedAt }}
         </div>
       </el-card>
 
@@ -220,7 +172,7 @@ function resetFilters() {
 
       <el-row :gutter="16">
         <el-col :xs="24" :sm="24" :md="24" :lg="16" :xl="16">
-          <el-card shadow="never" class="table-card">
+          <el-card v-loading="loading" shadow="never" class="table-card">
             <template #header>
               <div class="card-header">成绩明细</div>
             </template>
@@ -236,13 +188,14 @@ function resetFilters() {
                 </template>
               </el-table-column>
               <el-table-column prop="rankInClass" label="班级排名" min-width="90" />
-              <el-table-column label="排名趋势" min-width="90">
+              <el-table-column label="发布状态" min-width="90">
                 <template #default="{ row }">
-                  <el-tag effect="plain" :type="getTrendTagType(row.rankTrend)">
-                    {{ getTrendText(row.rankTrend) }}
+                  <el-tag effect="plain" :type="getPublishStatusType(row.examStatusCode)">
+                    {{ row.examStatusLabel }}
                   </el-tag>
                 </template>
               </el-table-column>
+              <el-table-column prop="examTime" label="考试时间" min-width="150" />
               <el-table-column prop="publishTime" label="发布时间" min-width="150" />
               <el-table-column label="操作" width="90" fixed="right">
                 <template #default="{ row }">
@@ -256,26 +209,30 @@ function resetFilters() {
         <el-col :xs="24" :sm="24" :md="24" :lg="8" :xl="8">
           <el-card shadow="never" class="trend-card">
             <template #header>
-              <div class="card-header">趋势统计</div>
+              <div class="card-header">分数分布</div>
             </template>
             <div class="trend-item">
-              <div class="trend-label">排名上升</div>
-              <el-progress :percentage="trendSummary.up" status="success" :stroke-width="12" />
+              <div class="trend-label">90 分及以上</div>
+              <el-progress :percentage="scoreBands.excellent" status="success" :stroke-width="12" />
             </div>
             <div class="trend-item">
-              <div class="trend-label">排名持平</div>
-              <el-progress :percentage="trendSummary.stable" :stroke-width="12" />
+              <div class="trend-label">80-89 分</div>
+              <el-progress :percentage="scoreBands.good" :stroke-width="12" />
             </div>
             <div class="trend-item">
-              <div class="trend-label">排名下降</div>
-              <el-progress :percentage="trendSummary.down" status="exception" :stroke-width="12" />
+              <div class="trend-label">60-79 分</div>
+              <el-progress :percentage="scoreBands.pass" status="warning" :stroke-width="12" />
+            </div>
+            <div class="trend-item">
+              <div class="trend-label">60 分以下</div>
+              <el-progress :percentage="scoreBands.fail" status="exception" :stroke-width="12" />
             </div>
             <el-divider />
             <div class="tips-title">学习建议</div>
             <ul class="tips-list">
-              <li>保持数学与化学优势学科的稳定输出。</li>
-              <li>重点复盘物理错题，按知识点建立错题卡。</li>
-              <li>英语写作每周至少完成 1 篇限时训练。</li>
+              <li>优先复盘未达 80 分科目，对照考试时间建立错题清单。</li>
+              <li>关注未发布成绩状态，避免把草稿成绩当作最终结果。</li>
+              <li>结合教师评语追踪最近一次考试的改进点。</li>
             </ul>
           </el-card>
         </el-col>
@@ -297,7 +254,17 @@ function resetFilters() {
           </div>
           <div class="detail-row">
             <span class="detail-label">班级排名</span>
-            <span>第 {{ currentRecord.rankInClass }} 名（{{ getTrendText(currentRecord.rankTrend) }}）</span>
+            <span>{{ currentRecord.rankInClass ? `第 ${currentRecord.rankInClass} 名` : '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">发布状态</span>
+            <el-tag :type="getPublishStatusType(currentRecord.examStatusCode)" effect="plain">
+              {{ currentRecord.examStatusLabel }}
+            </el-tag>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">考试时间</span>
+            <span>{{ currentRecord.examTime }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">发布时间</span>
@@ -308,8 +275,8 @@ function resetFilters() {
             <div class="comment-content">{{ currentRecord.teacherComment }}</div>
           </div>
           <div class="timestamps">
-            <div>created_at：{{ currentRecord.created_at }}</div>
-            <div>updated_at：{{ currentRecord.updated_at }}</div>
+            <div>created_at：{{ currentRecord.createdAt }}</div>
+            <div>updated_at：{{ currentRecord.updatedAt }}</div>
           </div>
         </div>
       </el-drawer>

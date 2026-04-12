@@ -1,0 +1,60 @@
+{
+  "name": "edusmart-manager-codex-plugin",
+  "version": "1.0.0",
+  "description": "教培智管系统 Codex 插件包 - 完整的教育管理解决方案",
+  "main": "index.js",
+  "scripts": {
+    "build": "node build-plugin.js",
+    "install": "node install-plugin.js",
+    "validate": "node validate-plugin.js"
+  },
+  "keywords": [
+    "education",
+    "management",
+    "spring-boot",
+    "vue3",
+    "mysql",
+    "codex-plugin",
+    "full-stack"
+  ],
+  "author": "EduSmart Development Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/edusmart/manager-system"
+  },
+  "bugs": {
+    "url": "https://github.com/edusmart/manager-system/issues"
+  },
+  "homepage": "https://github.com/edusmart/manager-system#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "archiver": "^6.0.1",
+    "chalk": "^5.3.0",
+    "fs-extra": "^11.2.0",
+    "inquirer": "^9.2.12",
+    "js-yaml": "^4.1.0",
+    "ora": "^7.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "prettier": "^3.1.1"
+  },
+  "codex": {
+    "plugin_type": "full_stack_application",
+    "target_platforms": ["windows", "macos", "linux"],
+    "installation_type": "package_manager",
+    "configuration_required": true,
+    "database_setup_required": true,
+    "estimated_installation_time": "30-60 minutes",
+    "difficulty_level": "intermediate",
+    "prerequisites": [
+      "Node.js >= 18.0.0",
+      "Java >= 17",
+      "Maven >= 3.8.0",
+      "MySQL >= 8.0"
+    ]
+  }
+}

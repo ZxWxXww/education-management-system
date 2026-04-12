@@ -1,138 +1,142 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { Calendar, CollectionTag, DataLine, Location } from '@element-plus/icons-vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { Calendar, CollectionTag, DataLine } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import PageShell from '../../components/PageShell.vue'
+import { fetchStudentClassDetail } from '../../api/student/course'
 
 const route = useRoute()
 
-// 班级信息 Mock 数据（切换真实后端时，请替换为 src/api/student/classInformation.js 的接口返回）
-const classInformationMock = ref({
-  classId: route.params.id || 'CLS-20260406-01',
+const classInformation = ref({
+  classId: route.params.id || '-',
   course: {
-    courseName: '高二数学强化提升班',
-    teacherName: '王晓晨',
-    classroom: '教学楼 B 栋 302',
-    cycle: '2026 春季学期（2-6 月）',
-    totalLessons: 48,
-    completedLessons: 31,
-    nextLessonTime: '2026-04-08 19:00 - 20:40',
-    contactOfficeHour: '周一至周五 16:00 - 17:30',
-    created_at: '2026-02-10 10:00:00',
-    updated_at: '2026-04-06 09:20:00'
+    courseName: '',
+    teacherName: '',
+    cycle: '',
+    totalLessons: 0,
+    completedLessons: 0,
+    nextLessonTime: '',
+    createdAt: '-',
+    updatedAt: '-'
   },
   statistics: {
-    studentCount: 36,
-    averageAttendanceRate: 97.2,
-    averageHomeworkCompletionRate: 92.8,
-    averageScore: 88.4,
-    created_at: '2026-04-06 09:20:00',
-    updated_at: '2026-04-06 09:20:00'
+    studentCount: 0,
+    averageAttendanceRate: 0,
+    averageScore: 0
   },
-  scheduleList: [
-    {
-      id: 1,
-      lessonNo: '第 32 课时',
-      date: '2026-04-08',
-      timeRange: '19:00 - 20:40',
-      chapter: '函数与导数综合训练',
-      homework: '函数压轴题专项（A 卷）',
-      status: '未开始',
-      created_at: '2026-04-06 09:20:00',
-      updated_at: '2026-04-06 09:20:00'
-    },
-    {
-      id: 2,
-      lessonNo: '第 31 课时',
-      date: '2026-04-05',
-      timeRange: '19:00 - 20:40',
-      chapter: '导数几何意义与最值问题',
-      homework: '导数应用分层作业（B 卷）',
-      status: '已完成',
-      created_at: '2026-04-05 21:00:00',
-      updated_at: '2026-04-05 21:00:00'
-    },
-    {
-      id: 3,
-      lessonNo: '第 30 课时',
-      date: '2026-04-03',
-      timeRange: '19:00 - 20:40',
-      chapter: '导数基础回顾与例题讲解',
-      homework: '导数计算专项训练',
-      status: '已完成',
-      created_at: '2026-04-03 21:00:00',
-      updated_at: '2026-04-03 21:00:00'
-    }
-  ],
-  classmates: [
-    { id: 1, studentNo: 'S20260318', studentName: '李明', attendanceRate: 100, homeworkRate: 95, latestScore: 91, created_at: '2026-02-10 10:00:00', updated_at: '2026-04-06 09:20:00' },
-    { id: 2, studentNo: 'S20260320', studentName: '周雨彤', attendanceRate: 97, homeworkRate: 92, latestScore: 89, created_at: '2026-02-10 10:00:00', updated_at: '2026-04-06 09:20:00' },
-    { id: 3, studentNo: 'S20260327', studentName: '张博文', attendanceRate: 94, homeworkRate: 88, latestScore: 84, created_at: '2026-02-10 10:00:00', updated_at: '2026-04-06 09:20:00' },
-    { id: 4, studentNo: 'S20260333', studentName: '陈思远', attendanceRate: 96, homeworkRate: 91, latestScore: 87, created_at: '2026-02-10 10:00:00', updated_at: '2026-04-06 09:20:00' }
-  ]
+  scheduleList: [],
+  classmates: []
 })
+
+const loading = ref(false)
 
 const summaryCards = computed(() => [
   {
     key: 'studentCount',
     title: '班级人数',
-    value: `${classInformationMock.value.statistics.studentCount} 人`,
+    value: `${classInformation.value.statistics.studentCount} 人`,
     icon: CollectionTag,
     tone: 'blue'
   },
   {
     key: 'averageAttendanceRate',
     title: '平均出勤率',
-    value: `${classInformationMock.value.statistics.averageAttendanceRate}%`,
+    value: `${classInformation.value.statistics.averageAttendanceRate}%`,
     icon: Calendar,
     tone: 'green'
   },
   {
-    key: 'averageHomeworkCompletionRate',
-    title: '作业完成率',
-    value: `${classInformationMock.value.statistics.averageHomeworkCompletionRate}%`,
+    key: 'averageScore',
+    title: '平均成绩',
+    value: `${classInformation.value.statistics.averageScore} 分`,
     icon: DataLine,
     tone: 'purple'
   }
 ])
 
 const lessonProgress = computed(() => {
-  const { completedLessons, totalLessons } = classInformationMock.value.course
+  const { completedLessons, totalLessons } = classInformation.value.course
+  if (!totalLessons) return 0
   return Math.round((completedLessons / totalLessons) * 100)
 })
 
 function getScheduleTagType(status) {
-  return status === '已完成' ? 'success' : 'warning'
+  return status === 'DONE' ? 'success' : 'warning'
 }
+
+async function loadClassInformation() {
+  const numericClassId = Number(route.params.id)
+  if (!Number.isFinite(numericClassId)) {
+    ElMessage.error('班级编号无效')
+    return
+  }
+  loading.value = true
+  try {
+    const detail = await fetchStudentClassDetail(numericClassId)
+    classInformation.value = {
+      classId: detail.classId || '-',
+      course: {
+        courseName: detail.courseName || '',
+        teacherName: detail.teacherName || '',
+        cycle: detail.cycle || '',
+        totalLessons: Number(detail.totalLessons || 0),
+        completedLessons: Number(detail.completedLessons || 0),
+        nextLessonTime: detail.nextLessonTime || '',
+        createdAt: detail.createdAt || '-',
+        updatedAt: detail.updatedAt || '-'
+      },
+      statistics: {
+        studentCount: Number(detail.studentCount || 0),
+        averageAttendanceRate: Number(detail.averageAttendanceRate || 0),
+        averageScore: Number(detail.averageScore || 0)
+      },
+      scheduleList: detail.scheduleList || [],
+      classmates: detail.classmates || []
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '班级信息加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadClassInformation()
+})
+
+watch(
+  () => route.params.id,
+  () => {
+    loadClassInformation()
+  }
+)
 </script>
 
 <template>
-  <PageShell :title="`班级信息（ID: ${classInformationMock.classId}）`" subtitle="课程列表 / 班级信息">
-    <div class="class-information-page">
+  <PageShell :title="`班级信息（ID: ${classInformation.classId}）`" subtitle="课程列表 / 班级信息">
+    <div v-loading="loading" class="class-information-page">
       <el-card shadow="never" class="overview-card">
         <div class="overview-header">
           <div class="title-block">
-            <h3>{{ classInformationMock.course.courseName }}</h3>
-            <p>授课教师：{{ classInformationMock.course.teacherName }} ｜ 开课周期：{{ classInformationMock.course.cycle }}</p>
+            <h3>{{ classInformation.course.courseName }}</h3>
+            <p>授课教师：{{ classInformation.course.teacherName }} ｜ 开课周期：{{ classInformation.course.cycle }}</p>
           </div>
-          <el-tag type="primary" effect="light" round>{{ classInformationMock.course.nextLessonTime }}</el-tag>
+          <el-tag type="primary" effect="light" round>{{ classInformation.course.nextLessonTime || '暂无后续排课' }}</el-tag>
         </div>
         <el-row :gutter="12" class="overview-body">
           <el-col :xs="24" :sm="24" :md="14" :lg="14" :xl="14">
             <el-descriptions :column="2" border size="default">
-              <el-descriptions-item label="上课地点">
-                <el-icon class="inline-icon"><Location /></el-icon>
-                {{ classInformationMock.course.classroom }}
-              </el-descriptions-item>
-              <el-descriptions-item label="教师答疑">{{ classInformationMock.course.contactOfficeHour }}</el-descriptions-item>
-              <el-descriptions-item label="开课时间">{{ classInformationMock.course.created_at }}</el-descriptions-item>
-              <el-descriptions-item label="最近更新">{{ classInformationMock.course.updated_at }}</el-descriptions-item>
+              <el-descriptions-item label="课程编号">{{ classInformation.classId }}</el-descriptions-item>
+              <el-descriptions-item label="任课教师">{{ classInformation.course.teacherName || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="开课时间">{{ classInformation.course.createdAt }}</el-descriptions-item>
+              <el-descriptions-item label="最近更新">{{ classInformation.course.updatedAt }}</el-descriptions-item>
             </el-descriptions>
           </el-col>
           <el-col :xs="24" :sm="24" :md="10" :lg="10" :xl="10">
             <div class="progress-panel">
               <div class="progress-title">课时进度</div>
-              <div class="progress-value">{{ classInformationMock.course.completedLessons }} / {{ classInformationMock.course.totalLessons }}</div>
+              <div class="progress-value">{{ classInformation.course.completedLessons }} / {{ classInformation.course.totalLessons }}</div>
               <el-progress :percentage="lessonProgress" :stroke-width="12" />
             </div>
           </el-col>
@@ -155,18 +159,17 @@ function getScheduleTagType(status) {
         <template #header>
           <div class="section-header">课程安排</div>
         </template>
-        <el-table :data="classInformationMock.scheduleList" stripe>
-          <el-table-column prop="lessonNo" label="课时" min-width="100" />
-          <el-table-column prop="date" label="日期" min-width="110" />
-          <el-table-column prop="timeRange" label="时间" min-width="130" />
-          <el-table-column prop="chapter" label="教学内容" min-width="220" />
-          <el-table-column prop="homework" label="课后作业" min-width="200" />
+        <el-table :data="classInformation.scheduleList" stripe>
+          <el-table-column prop="sessionDate" label="日期" min-width="110" />
+          <el-table-column label="时间" min-width="130">
+            <template #default="{ row }">{{ row.startTime }} - {{ row.endTime }}</template>
+          </el-table-column>
           <el-table-column label="状态" width="90">
             <template #default="{ row }">
               <el-tag size="small" :type="getScheduleTagType(row.status)">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="updated_at" label="更新时间" min-width="160" />
+          <el-table-column prop="updatedAt" label="更新时间" min-width="160" />
         </el-table>
       </el-card>
 
@@ -174,7 +177,7 @@ function getScheduleTagType(status) {
         <template #header>
           <div class="section-header">班级同学概览</div>
         </template>
-        <el-table :data="classInformationMock.classmates" stripe>
+        <el-table :data="classInformation.classmates" stripe>
           <el-table-column prop="studentNo" label="学号" min-width="120" />
           <el-table-column prop="studentName" label="姓名" min-width="100" />
           <el-table-column label="出勤率" min-width="120">
@@ -182,13 +185,8 @@ function getScheduleTagType(status) {
               <el-progress :percentage="row.attendanceRate" :stroke-width="8" />
             </template>
           </el-table-column>
-          <el-table-column label="作业完成率" min-width="140">
-            <template #default="{ row }">
-              <el-progress :percentage="row.homeworkRate" :stroke-width="8" status="success" />
-            </template>
-          </el-table-column>
           <el-table-column prop="latestScore" label="最近测验分" min-width="110" />
-          <el-table-column prop="updated_at" label="更新时间" min-width="160" />
+          <el-table-column prop="updatedAt" label="更新时间" min-width="160" />
         </el-table>
       </el-card>
     </div>

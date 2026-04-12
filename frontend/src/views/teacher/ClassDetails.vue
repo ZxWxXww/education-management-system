@@ -1,73 +1,65 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Calendar, DataAnalysis, DocumentChecked, Histogram, Reading, UserFilled } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { fetchTeacherClassDetail } from '../../api/teacher/class'
 
 const route = useRoute()
-
-// 班级详情页 Mock 数据（接入真实后端时，替换为 src/api/teacher/class.js 的接口请求）
-const classDetailMap = {
-  'CLS-2026-001': {
-    classId: 'CLS-2026-001',
-    className: '高二数学提高班',
-    courseName: '数学（函数与导数）',
-    classroom: 'B-302',
-    schedule: '每周一 / 三 08:30 - 10:00',
-    termLabel: '2026 春季学期',
-    classSlogan: '稳基础、强思维、提成绩',
-    teacherName: '王老师',
-    teacherTitle: '数学教研组',
-    created_at: '2026-02-20 09:00:00',
-    updated_at: '2026-04-06 08:40:00',
-    stats: [
-      { key: 'students', label: '在读学员', value: 45, unit: '人', trend: '+2', icon: 'users' },
-      { key: 'attendance', label: '本周出勤率', value: 96.4, unit: '%', trend: '+1.2%', icon: 'calendar' },
-      { key: 'homework', label: '作业提交率', value: 92.0, unit: '%', trend: '+3.4%', icon: 'homework' },
-      { key: 'score', label: '阶段测评均分', value: 86.5, unit: '分', trend: '+2.1', icon: 'score' }
-    ],
-    chapterProgress: [
-      { chapter: '函数图像综合', progress: 100 },
-      { chapter: '导数基础应用', progress: 84 },
-      { chapter: '导数综合题型', progress: 62 },
-      { chapter: '阶段复盘训练', progress: 38 }
-    ],
-    sessions: [
-      { date: '04-01', topic: '函数单调性专项', content: '单调区间判定与证明', homework: '课后练习 1-12 题', status: '已完成', created_at: '2026-04-01 10:00:00', updated_at: '2026-04-01 10:10:00' },
-      { date: '04-03', topic: '导数与最值', content: '导数求最值综合题', homework: '课堂测验 A 卷', status: '已完成', created_at: '2026-04-03 10:00:00', updated_at: '2026-04-03 10:05:00' },
-      { date: '04-08', topic: '切线问题提升', content: '切线方程与综合应用', homework: '课后练习 13-20 题', status: '进行中', created_at: '2026-04-08 08:30:00', updated_at: '2026-04-08 08:35:00' }
-    ],
-    students: [
-      { studentId: 'STU-23001', studentName: '李同学', gender: '男', attendanceRate: 98, homeworkRate: 100, score: 91, status: '稳定', created_at: '2026-02-20 09:10:00', updated_at: '2026-04-06 08:20:00' },
-      { studentId: 'STU-23002', studentName: '张同学', gender: '女', attendanceRate: 92, homeworkRate: 94, score: 86, status: '提升中', created_at: '2026-02-20 09:12:00', updated_at: '2026-04-06 08:21:00' },
-      { studentId: 'STU-23003', studentName: '赵同学', gender: '男', attendanceRate: 88, homeworkRate: 82, score: 79, status: '需关注', created_at: '2026-02-20 09:13:00', updated_at: '2026-04-06 08:22:00' },
-      { studentId: 'STU-23004', studentName: '王同学', gender: '女', attendanceRate: 95, homeworkRate: 96, score: 89, status: '稳定', created_at: '2026-02-20 09:15:00', updated_at: '2026-04-06 08:22:30' },
-      { studentId: 'STU-23005', studentName: '陈同学', gender: '男', attendanceRate: 84, homeworkRate: 78, score: 74, status: '需关注', created_at: '2026-02-20 09:17:00', updated_at: '2026-04-06 08:23:00' }
-    ]
-  }
-}
-
-const fallbackId = 'CLS-2026-001'
-const activeClassId = computed(() => String(route.params.id || fallbackId))
-const classDetail = computed(() => classDetailMap[activeClassId.value] || classDetailMap[fallbackId])
+const classDetail = ref({
+  classId: '-',
+  className: '',
+  courseName: '',
+  schedule: '',
+  teacherName: '',
+  teacherTitle: '',
+  subject: '',
+  createdAt: '-',
+  updatedAt: '-',
+  studentCount: 0,
+  sessionCount: 0,
+  attendanceRate: 0,
+  averageScore: 0,
+  recentSessions: [],
+  students: []
+})
+const loading = ref(false)
 const studentKeyword = ref('')
 
 const filteredStudents = computed(() => {
   const keyword = studentKeyword.value.trim()
-  if (!keyword) return classDetail.value.students
+  if (!keyword) return classDetail.value.students || []
   return classDetail.value.students.filter(
-    (item) => item.studentName.includes(keyword) || item.studentId.includes(keyword)
+    (item) => item.studentName.includes(keyword) || item.studentNo.includes(keyword)
   )
 })
 
-function statusType(status) {
-  if (status === '稳定') return 'success'
-  if (status === '提升中') return 'warning'
-  return 'danger'
+const statisticCards = computed(() => [
+  { key: 'students', label: '在班学员', value: classDetail.value.studentCount, unit: '人', icon: 'users' },
+  { key: 'attendance', label: '累计出勤率', value: classDetail.value.attendanceRate, unit: '%', icon: 'calendar' },
+  { key: 'sessions', label: '累计课次', value: classDetail.value.sessionCount, unit: '节', icon: 'homework' },
+  { key: 'score', label: '平均成绩', value: classDetail.value.averageScore, unit: '分', icon: 'score' }
+])
+
+const insightRows = computed(() => [
+  { label: '班级编号', value: classDetail.value.classId || '-' },
+  { label: '课程名称', value: classDetail.value.courseName || '-' },
+  { label: '授课教师', value: classDetail.value.teacherName || '-' },
+  { label: '教师职称', value: classDetail.value.teacherTitle || '-' },
+  { label: '任教学科', value: classDetail.value.subject || '-' },
+  { label: '开班周期', value: classDetail.value.schedule || '-' },
+  { label: '创建时间', value: classDetail.value.createdAt || '-' },
+  { label: '更新时间', value: classDetail.value.updatedAt || '-' }
+])
+
+function enrollmentStatusType(status) {
+  if (status === '在班') return 'success'
+  return 'info'
 }
 
 function sessionTagType(status) {
-  if (status === '已完成') return 'success'
-  if (status === '进行中') return 'primary'
+  if (status === 'DONE') return 'success'
+  if (status === 'IN_PROGRESS') return 'primary'
   return 'info'
 }
 
@@ -77,48 +69,76 @@ function cardIcon(icon) {
   if (icon === 'homework') return DocumentChecked
   return DataAnalysis
 }
+
+async function loadClassDetail() {
+  const numericClassId = Number(route.params.id)
+  if (!Number.isFinite(numericClassId)) {
+    ElMessage.error('班级编号无效')
+    return
+  }
+  loading.value = true
+  try {
+    classDetail.value = {
+      ...(await fetchTeacherClassDetail(numericClassId))
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '班级详情加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadClassDetail()
+})
+
+watch(
+  () => route.params.id,
+  () => {
+    loadClassDetail()
+  }
+)
 </script>
 
 <template>
-  <div class="class-details">
+  <div v-loading="loading" class="class-details">
     <section class="details-hero">
       <div>
         <p class="details-hero__path">我的课程 / 班级详情</p>
         <h1 class="details-hero__title">{{ classDetail.className }}</h1>
-        <p class="details-hero__meta">{{ classDetail.courseName }} · {{ classDetail.schedule }} · {{ classDetail.classroom }}</p>
-        <p class="details-hero__desc">{{ classDetail.classSlogan }}</p>
+        <p class="details-hero__meta">{{ classDetail.courseName }} · {{ classDetail.schedule || '未设置开班周期' }}</p>
+        <p class="details-hero__desc">以下信息均来自当前班级的真实排课、出勤和成绩记录</p>
       </div>
       <div class="details-hero__badge">
-        <span>{{ classDetail.termLabel }}</span>
-        <strong>{{ classDetail.teacherName }}</strong>
-        <small>{{ classDetail.teacherTitle }}</small>
+        <span>{{ classDetail.classId }}</span>
+        <strong>{{ classDetail.teacherName || '未分配教师' }}</strong>
+        <small>{{ classDetail.teacherTitle || '未设置职称' }}</small>
       </div>
     </section>
 
     <section class="details-stat-grid">
-      <article v-for="card in classDetail.stats" :key="card.key" class="stat-card">
+      <article v-for="card in statisticCards" :key="card.key" class="stat-card">
         <div class="stat-card__head">
           <span>{{ card.label }}</span>
           <el-icon><component :is="cardIcon(card.icon)" /></el-icon>
         </div>
         <p class="stat-card__value">{{ card.value }}<small>{{ card.unit }}</small></p>
-        <p class="stat-card__trend">较上周 {{ card.trend }}</p>
+        <p class="stat-card__trend">来源于真实班级数据汇总</p>
       </article>
     </section>
 
     <section class="details-main-grid">
       <article class="panel">
         <header class="panel__head">
-          <h2><el-icon><Histogram /></el-icon> 章节进度</h2>
-          <span>{{ classDetail.chapterProgress.length }} 个模块</span>
+          <h2><el-icon><Histogram /></el-icon> 班级概览</h2>
+          <span>{{ insightRows.length }} 项</span>
         </header>
-        <div class="progress-list">
-          <div v-for="item in classDetail.chapterProgress" :key="item.chapter" class="progress-item">
-            <div class="progress-item__top">
-              <span>{{ item.chapter }}</span>
-              <span>{{ item.progress }}%</span>
+        <div class="session-list">
+          <div v-for="item in insightRows" :key="item.label" class="session-item">
+            <div>
+              <p class="session-item__topic">{{ item.label }}</p>
+              <p class="session-item__text">{{ item.value }}</p>
             </div>
-            <el-progress :percentage="item.progress" :stroke-width="8" :show-text="false" />
           </div>
         </div>
       </article>
@@ -126,18 +146,19 @@ function cardIcon(icon) {
       <article class="panel">
         <header class="panel__head">
           <h2><el-icon><Reading /></el-icon> 最近课次</h2>
-          <span>{{ classDetail.sessions.length }} 节</span>
+          <span>{{ classDetail.recentSessions.length }} 节</span>
         </header>
         <div class="session-list">
-          <div v-for="item in classDetail.sessions" :key="`${item.date}-${item.topic}`" class="session-item">
+          <div v-for="item in classDetail.recentSessions" :key="item.id" class="session-item">
             <div>
-              <p class="session-item__date">{{ item.date }}</p>
-              <p class="session-item__topic">{{ item.topic }}</p>
-              <p class="session-item__text">{{ item.content }}</p>
-              <p class="session-item__text">作业：{{ item.homework }}</p>
+              <p class="session-item__date">{{ item.sessionDate }}</p>
+              <p class="session-item__topic">{{ item.sessionTitle }}</p>
+              <p class="session-item__text">{{ item.startTime }} - {{ item.endTime }}</p>
+              <p class="session-item__text">{{ item.remark || '无额外备注' }}</p>
             </div>
             <el-tag :type="sessionTagType(item.status)" effect="plain">{{ item.status }}</el-tag>
           </div>
+          <el-empty v-if="classDetail.recentSessions.length === 0" description="暂无课次记录" :image-size="72" />
         </div>
       </article>
     </section>
@@ -149,19 +170,18 @@ function cardIcon(icon) {
       </header>
 
       <el-table :data="filteredStudents" stripe>
-        <el-table-column prop="studentId" label="学号" min-width="120" />
+        <el-table-column prop="studentNo" label="学号" min-width="120" />
         <el-table-column prop="studentName" label="姓名" min-width="100" />
-        <el-table-column prop="gender" label="性别" min-width="80" />
+        <el-table-column prop="grade" label="年级" min-width="90" />
         <el-table-column prop="attendanceRate" label="出勤率" min-width="110">
           <template #default="{ row }">{{ row.attendanceRate }}%</template>
         </el-table-column>
-        <el-table-column prop="homeworkRate" label="作业完成率" min-width="130">
-          <template #default="{ row }">{{ row.homeworkRate }}%</template>
-        </el-table-column>
-        <el-table-column prop="score" label="阶段成绩" min-width="100" />
-        <el-table-column prop="status" label="学习状态" min-width="110">
+        <el-table-column prop="attendanceCount" label="考勤记录" min-width="110" />
+        <el-table-column prop="averageScore" label="平均成绩" min-width="100" />
+        <el-table-column prop="joinedAt" label="入班时间" min-width="160" />
+        <el-table-column prop="enrollmentStatus" label="在班状态" min-width="110">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" effect="light">{{ row.status }}</el-tag>
+            <el-tag :type="enrollmentStatusType(row.enrollmentStatus)" effect="light">{{ row.enrollmentStatus }}</el-tag>
           </template>
         </el-table-column>
       </el-table>

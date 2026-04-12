@@ -1,80 +1,73 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Bell, Calendar, CircleCheck, DataAnalysis, Reading, UserFilled, WarningFilled } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { useUserStore } from '../../stores/user'
+import { fetchTeacherAssignmentPage } from '../../api/teacher/assignment'
+import { fetchTeacherClassPage } from '../../api/teacher/class'
+import { fetchTeacherAttendanceExceptionPage } from '../../api/teacher/attendance'
 
-// 教师工作台 Mock 数据（切换真实后端时，请替换为 src/api/teacher/workspace.js 的接口返回）
-const teacherProfile = {
-  name: '王老师',
-  title: '数学教研组 · 高二年级',
-  todayLabel: '2026-04-06 星期一',
-  created_at: '2026-04-06 08:00:00',
-  updated_at: '2026-04-06 08:00:00'
-}
+const userStore = useUserStore()
+userStore.restoreSession()
 
-const statisticCards = [
-  { key: 'classes', label: '在授班级', value: '6', unit: '个', trend: '+1', trendType: 'up', icon: 'reading' },
-  { key: 'students', label: '在读学生', value: '218', unit: '人', trend: '+12', trendType: 'up', icon: 'users' },
-  { key: 'homework', label: '待批作业', value: '38', unit: '份', trend: '-4', trendType: 'down', icon: 'check' },
-  { key: 'abnormal', label: '异常考勤', value: '7', unit: '条', trend: '+2', trendType: 'warn', icon: 'warning' }
-]
+const loading = ref(false)
+const classRows = ref([])
+const assignmentRows = ref([])
+const abnormalAttendanceList = ref([])
 
-const todayCourseList = [
-  {
-    id: 1,
-    courseName: '高二数学提高班',
-    className: '高二（3）班',
-    timeRange: '08:30 - 10:00',
-    room: 'B-302',
-    status: '进行中',
-    created_at: '2026-04-06 08:30:00',
-    updated_at: '2026-04-06 08:35:00'
-  },
-  {
-    id: 2,
-    courseName: '高二数学冲刺班',
-    className: '高二（6）班',
-    timeRange: '13:30 - 15:00',
-    room: 'A-201',
-    status: '待开始',
-    created_at: '2026-04-06 13:30:00',
-    updated_at: '2026-04-06 13:30:00'
-  },
-  {
-    id: 3,
-    courseName: '高二竞赛数学',
-    className: '竞赛1班',
-    timeRange: '19:00 - 20:30',
-    room: '线上直播',
-    status: '待开始',
-    created_at: '2026-04-06 19:00:00',
-    updated_at: '2026-04-06 19:00:00'
-  }
-]
+const teacherProfile = computed(() => ({
+  name: userStore.userInfo?.realName || userStore.userInfo?.username || '教师',
+  title: '教师工作台',
+  todayLabel: new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long' })
+}))
 
-const assignmentProgress = [
-  { className: '高二（3）班', submitted: 42, total: 45, created_at: '2026-04-05 21:00:00', updated_at: '2026-04-06 08:10:00' },
-  { className: '高二（6）班', submitted: 39, total: 44, created_at: '2026-04-05 21:00:00', updated_at: '2026-04-06 08:12:00' },
-  { className: '竞赛1班', submitted: 22, total: 28, created_at: '2026-04-05 22:00:00', updated_at: '2026-04-06 08:15:00' }
-]
+const todayCourseList = computed(() =>
+  classRows.value.slice(0, 5).map((item) => ({
+    id: item.id,
+    courseName: item.courseName,
+    className: item.className,
+    timeRange: item.schedule || '待排课',
+    room: item.classroom || '待分配',
+    status: item.status
+  }))
+)
 
-const abnormalAttendanceList = [
-  { studentName: '李同学', className: '高二（3）班', type: '迟到', time: '08:42', created_at: '2026-04-06 08:42:00', updated_at: '2026-04-06 08:43:00' },
-  { studentName: '张同学', className: '高二（6）班', type: '缺勤', time: '13:32', created_at: '2026-04-06 13:32:00', updated_at: '2026-04-06 13:35:00' },
-  { studentName: '赵同学', className: '竞赛1班', type: '请假', time: '18:55', created_at: '2026-04-06 18:55:00', updated_at: '2026-04-06 18:58:00' }
-]
+const statisticCards = computed(() => {
+  const classCount = classRows.value.length
+  const students = assignmentRows.value.reduce((acc, item) => {
+    const current = acc[item.className] || 0
+    acc[item.className] = Math.max(current, Number(item.total || 0))
+    return acc
+  }, {})
+  const studentCount = Object.values(students).reduce((sum, value) => sum + Number(value || 0), 0)
+  const pendingCount = assignmentRows.value.reduce((sum, item) => sum + Math.max(0, Number(item.total || 0) - Number(item.submitted || 0)), 0)
+  return [
+    { key: 'classes', label: '在授班级', value: `${classCount}`, unit: '个', trend: `已排课 ${todayCourseList.value.length}`, trendType: 'up', icon: 'reading' },
+    { key: 'students', label: '覆盖学生', value: `${studentCount}`, unit: '人', trend: `作业 ${assignmentRows.value.length}`, trendType: 'up', icon: 'users' },
+    { key: 'homework', label: '待补作业', value: `${pendingCount}`, unit: '份', trend: `已提交 ${assignmentRows.value.reduce((sum, item) => sum + Number(item.submitted || 0), 0)}`, trendType: 'down', icon: 'check' },
+    { key: 'abnormal', label: '异常考勤', value: `${abnormalAttendanceList.value.length}`, unit: '条', trend: '来自真实异常记录', trendType: 'warn', icon: 'warning' }
+  ]
+})
 
-const teachingTrend = [72, 75, 80, 84, 82, 88, 91]
-const trendLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const trendLabels = computed(() => assignmentRows.value.slice(0, 7).map((item) => item.className || '班级'))
+const teachingTrend = computed(() =>
+  assignmentRows.value.slice(0, 7).map((item) => {
+    const total = Number(item.total || 0)
+    const submitted = Number(item.submitted || 0)
+    return total > 0 ? Number(((submitted / total) * 100).toFixed(0)) : 0
+  })
+)
 
 const trendPath = computed(() => {
+  if (!teachingTrend.value.length) return ''
   const width = 560
   const height = 210
-  const min = Math.min(...teachingTrend)
-  const max = Math.max(...teachingTrend)
+  const min = Math.min(...teachingTrend.value)
+  const max = Math.max(...teachingTrend.value)
   const range = max - min || 1
-  return teachingTrend
+  return teachingTrend.value
     .map((point, index) => {
-      const x = (index / (teachingTrend.length - 1)) * width
+      const x = teachingTrend.value.length === 1 ? width / 2 : (index / (teachingTrend.value.length - 1)) * width
       const y = height - ((point - min) / range) * (height - 36) - 12
       return `${x.toFixed(2)},${y.toFixed(2)}`
     })
@@ -82,15 +75,42 @@ const trendPath = computed(() => {
 })
 
 const assignmentProgressWithRate = computed(() =>
-  assignmentProgress.map((item) => ({
+  assignmentRows.value.map((item) => ({
     ...item,
-    rate: Number(((item.submitted / item.total) * 100).toFixed(0))
+    rate: Number(item.total || 0) > 0 ? Number(((Number(item.submitted || 0) / Number(item.total || 0)) * 100).toFixed(0)) : 0
   }))
 )
+
+async function loadWorkspace() {
+  loading.value = true
+  try {
+    const [classPage, assignmentPage, abnormalPage] = await Promise.all([
+      fetchTeacherClassPage({ pageNum: 1, pageSize: 100 }),
+      fetchTeacherAssignmentPage({ pageNum: 1, pageSize: 100 }),
+      fetchTeacherAttendanceExceptionPage({ pageNum: 1, pageSize: 20 })
+    ])
+    classRows.value = classPage.list
+    assignmentRows.value = assignmentPage.list
+    abnormalAttendanceList.value = abnormalPage.list.map((item) => ({
+      studentName: item.studentName,
+      className: item.className,
+      type: item.abnormalType,
+      time: item.checkInTime || '-'
+    }))
+  } catch (error) {
+    ElMessage.error(error.message || '教师工作台加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadWorkspace()
+})
 </script>
 
 <template>
-  <div class="workspace">
+  <div v-loading="loading" class="workspace">
     <section class="workspace__hero">
       <div>
         <h1 class="workspace__title">教师工作台</h1>
@@ -111,15 +131,15 @@ const assignmentProgressWithRate = computed(() =>
           </span>
         </div>
         <p class="stat-card__value">{{ card.value }}<small>{{ card.unit }}</small></p>
-        <p class="stat-card__trend" :class="`stat-card__trend--${card.trendType}`">较昨日 {{ card.trend }}</p>
+        <p class="stat-card__trend" :class="`stat-card__trend--${card.trendType}`">{{ card.trend }}</p>
       </article>
     </section>
 
     <section class="workspace__main">
       <article class="panel panel--schedule">
         <header class="panel__head">
-          <h2 class="panel__title"><el-icon><Calendar /></el-icon> 今日课程安排</h2>
-          <span class="panel__tag">{{ todayCourseList.length }} 节</span>
+          <h2 class="panel__title"><el-icon><Calendar /></el-icon> 我的授课班级</h2>
+          <span class="panel__tag">{{ todayCourseList.length }} 个班级</span>
         </header>
         <div class="course-list">
           <div v-for="course in todayCourseList" :key="course.id" class="course-item">
@@ -128,15 +148,15 @@ const assignmentProgressWithRate = computed(() =>
               <p class="course-item__title">{{ course.courseName }}</p>
               <p class="course-item__meta">{{ course.className }} · {{ course.room }}</p>
             </div>
-            <span class="course-item__status" :class="{ 'course-item__status--active': course.status === '进行中' }">{{ course.status }}</span>
+                  <span class="course-item__status" :class="{ 'course-item__status--active': course.status === '进行中' }">{{ course.status }}</span>
           </div>
         </div>
       </article>
 
       <article class="panel panel--trend">
         <header class="panel__head">
-          <h2 class="panel__title"><el-icon><DataAnalysis /></el-icon> 教学完成度趋势</h2>
-          <span class="panel__tag">近 7 天</span>
+          <h2 class="panel__title"><el-icon><DataAnalysis /></el-icon> 作业提交率趋势</h2>
+          <span class="panel__tag">最近 7 条作业</span>
         </header>
         <div class="trend-chart">
           <svg viewBox="0 0 560 240" preserveAspectRatio="none" aria-hidden="true">
@@ -146,8 +166,8 @@ const assignmentProgressWithRate = computed(() =>
                 <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0" />
               </linearGradient>
             </defs>
-            <polygon :points="`0,228 ${trendPath} 560,228`" fill="url(#workspaceLineArea)" />
-            <polyline :points="trendPath" fill="none" stroke="#1d4ed8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+            <polygon v-if="trendPath" :points="`0,228 ${trendPath} 560,228`" fill="url(#workspaceLineArea)" />
+            <polyline v-if="trendPath" :points="trendPath" fill="none" stroke="#1d4ed8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
           <div class="trend-chart__axis">
             <span v-for="day in trendLabels" :key="day">{{ day }}</span>
@@ -160,7 +180,7 @@ const assignmentProgressWithRate = computed(() =>
       <article class="panel panel--assignment">
         <header class="panel__head">
           <h2 class="panel__title"><el-icon><CircleCheck /></el-icon> 作业提交进度</h2>
-          <span class="panel__tag">{{ assignmentProgress.length }} 个班级</span>
+          <span class="panel__tag">{{ assignmentProgressWithRate.length }} 条记录</span>
         </header>
         <div class="progress-list">
           <div v-for="item in assignmentProgressWithRate" :key="item.className" class="progress-item">

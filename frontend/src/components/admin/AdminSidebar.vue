@@ -4,13 +4,14 @@ import { useRouter } from 'vue-router'
 import { getMenuByRole } from '../../menus'
 
 const props = defineProps({
+  permissions: { type: Array, default: () => [] },
   activePath: { type: String, required: true },
   collapsed: { type: Boolean, default: false }
 })
 
 const router = useRouter()
 
-const adminMenu = computed(() => getMenuByRole('admin'))
+const adminMenu = computed(() => getMenuByRole('admin', props.permissions))
 
 const activeRootMenuPath = computed(() => {
   const target = adminMenu.value.find((item) => {

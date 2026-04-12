@@ -1,68 +1,28 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { Download, Histogram, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { fetchAdminGradePage } from '../../api/admin/grade'
 
-// 成绩管理 mock 数据（后续可替换为 src/api/admin/grade.js 中的真实接口）
 const keyword = ref('')
 const courseFilter = ref('全部课程')
-const termFilter = ref('2025-2026 学年下学期')
+const termFilter = ref('全部时间')
+const loading = ref(false)
 
-const courseOptions = ['全部课程', '高一数学冲刺班', '高二英语提升班', 'Python 入门班', '前端工程化班']
-const termOptions = ['2025-2026 学年下学期', '2025-2026 学年上学期']
+const gradeList = ref([])
 
-const gradeList = ref([
-  {
-    id: 'G-202604-001',
-    studentName: '赵子豪',
-    studentNo: 'S202401023',
-    course: '高一数学冲刺班',
-    className: '高一(1)班',
-    assignment: '函数综合训练（第一章）',
-    score: 92,
-    rank: 4,
-    teacher: '王雪',
-    created_at: '2026-04-02 13:10:05',
-    updated_at: '2026-04-03 10:44:18'
-  },
-  {
-    id: 'G-202604-002',
-    studentName: '陈佳怡',
-    studentNo: 'S202401041',
-    course: '高二英语提升班',
-    className: '高二(3)班',
-    assignment: '阅读理解专项（Unit 5）',
-    score: 88,
-    rank: 9,
-    teacher: '刘敏',
-    created_at: '2026-04-02 13:16:42',
-    updated_at: '2026-04-03 11:20:03'
-  },
-  {
-    id: 'G-202604-003',
-    studentName: '林书禾',
-    studentNo: 'S202401087',
-    course: 'Python 入门班',
-    className: '初级(2)班',
-    assignment: '循环与列表综合作业',
-    score: 76,
-    rank: 15,
-    teacher: '周凯',
-    created_at: '2026-04-01 16:39:27',
-    updated_at: '2026-04-02 09:31:50'
-  },
-  {
-    id: 'G-202604-004',
-    studentName: '徐然',
-    studentNo: 'S202401112',
-    course: '前端工程化班',
-    className: '前端(1)班',
-    assignment: 'Vue 组件通信练习',
-    score: 95,
-    rank: 2,
-    teacher: '陈然',
-    created_at: '2026-04-04 10:22:15',
-    updated_at: '2026-04-04 17:05:41'
-  }
+const courseOptions = computed(() => [
+  '全部课程',
+  ...new Set(gradeList.value.map((item) => item.course).filter(Boolean))
+])
+
+const termOptions = computed(() => [
+  '全部时间',
+  ...new Set(
+    gradeList.value
+      .map((item) => item.publishTime && item.publishTime !== '-' ? item.publishTime.slice(0, 7) : '')
+      .filter(Boolean)
+  )
 ])
 
 const filteredGrades = computed(() =>
@@ -73,20 +33,21 @@ const filteredGrades = computed(() =>
       row.studentNo.includes(keyword.value) ||
       row.assignment.includes(keyword.value)
     const matchCourse = courseFilter.value === '全部课程' || row.course === courseFilter.value
-    return matchKeyword && matchCourse
+    const matchTerm = termFilter.value === '全部时间' || row.publishTime.startsWith(termFilter.value)
+    return matchKeyword && matchCourse && matchTerm
   })
 )
 
 const gradeStats = computed(() => {
-  const all = gradeList.value
+  const all = filteredGrades.value
   const avg = Math.round(all.reduce((sum, row) => sum + row.score, 0) / (all.length || 1))
   const excellent = all.filter((row) => row.score >= 90).length
   const pass = all.filter((row) => row.score >= 60).length
   return [
-    { label: '平均分', value: `${avg}`, tip: '全课程' },
-    { label: '优秀人数(90+)', value: `${excellent}`, tip: '本学期' },
-    { label: '及格率', value: `${Math.round((pass / (all.length || 1)) * 100)}%`, tip: '实时' },
-    { label: '成绩记录', value: `${all.length}`, tip: termFilter.value }
+    { label: '平均分', value: `${avg}`, tip: '当前筛选结果' },
+    { label: '优秀人数(90+)', value: `${excellent}`, tip: '当前筛选结果' },
+    { label: '及格率', value: `${Math.round((pass / (all.length || 1)) * 100)}%`, tip: '当前筛选结果' },
+    { label: '成绩记录', value: `${all.length}`, tip: termFilter.value === '全部时间' ? '全部时间' : termFilter.value }
   ]
 })
 
@@ -99,8 +60,8 @@ const scoreSegments = computed(() => {
   ]
 
   return segments.map((seg) => {
-    const count = gradeList.value.filter((row) => row.score >= seg.min && row.score <= seg.max).length
-    const percent = Math.round((count / (gradeList.value.length || 1)) * 100)
+    const count = filteredGrades.value.filter((row) => row.score >= seg.min && row.score <= seg.max).length
+    const percent = Math.round((count / (filteredGrades.value.length || 1)) * 100)
     return { ...seg, count, percent }
   })
 })
@@ -111,24 +72,30 @@ function scoreTagType(score) {
   if (score >= 60) return 'warning'
   return 'danger'
 }
+
+async function loadGrades() {
+  loading.value = true
+  try {
+    const page = await fetchAdminGradePage({ pageNum: 1, pageSize: 200 })
+    gradeList.value = page.list
+  } catch (error) {
+    ElMessage.error(error.message || '管理员成绩列表加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadGrades()
+})
 </script>
 
 <template>
-  <div class="grade-management">
+  <div v-loading="loading" class="grade-management">
     <section class="page-head">
       <div>
         <h1 class="page-title">成绩管理</h1>
         <p class="page-subtitle">教学资源 / 成绩管理</p>
-      </div>
-      <div class="head-actions">
-        <el-button class="action-btn" type="default">
-          <el-icon><Histogram /></el-icon>
-          <span>分析报告</span>
-        </el-button>
-        <el-button class="action-btn action-btn--primary" type="primary">
-          <el-icon><Plus /></el-icon>
-          <span>录入成绩</span>
-        </el-button>
       </div>
     </section>
 
@@ -156,13 +123,9 @@ function scoreTagType(score) {
           </el-select>
         </div>
         <div class="toolbar-right">
-          <el-button class="action-btn" type="default">
+          <el-button class="action-btn" type="default" @click="loadGrades">
             <el-icon><Refresh /></el-icon>
             <span>刷新</span>
-          </el-button>
-          <el-button class="action-btn" type="default">
-            <el-icon><Download /></el-icon>
-            <span>导出</span>
           </el-button>
         </div>
       </header>
@@ -183,8 +146,9 @@ function scoreTagType(score) {
             </el-table-column>
             <el-table-column prop="rank" label="班级排名" width="95" />
             <el-table-column prop="teacher" label="任课教师" width="95" />
-            <el-table-column prop="created_at" label="created_at" min-width="170" />
-            <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+            <el-table-column prop="publishTime" label="发布时间" min-width="170" />
+            <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+            <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
           </el-table>
         </article>
 
@@ -204,8 +168,8 @@ function scoreTagType(score) {
             </div>
           </article>
           <article class="mini-card">
-            <h3>接口切换说明</h3>
-            <p>当前页面使用本地 mock。接入后端时，将 gradeList 替换为 src/api/admin/grade.js 的接口响应。</p>
+            <h3>真实数据说明</h3>
+            <p>当前页面已切换为管理员考试成绩聚合视图，分数段分布和统计卡片均基于真实成绩记录计算。</p>
           </article>
         </aside>
       </div>
@@ -242,19 +206,9 @@ function scoreTagType(score) {
   font-size: 14px;
 }
 
-.head-actions {
-  display: flex;
-  gap: 12px;
-}
-
 .action-btn {
   border-radius: 10px;
   height: 38px;
-}
-
-.action-btn--primary {
-  border: none;
-  background: #005daa;
 }
 
 .stats-grid {

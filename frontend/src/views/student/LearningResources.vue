@@ -1,10 +1,11 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Collection, Download, Files, FolderOpened } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
+import { fetchCurrentStudentProfile } from '../../api/student/profile'
+import { fetchStudentResourceDetail, fetchStudentResourcePage } from '../../api/student/resource'
 
-// 学生端“我的作业-学习资料库”Mock 数据
-// 切换真实后端时，请替换为 src/api/student/learningResources.js 的接口返回
 const resourceData = ref({
   profile: {
     studentNo: 'S20260318',
@@ -77,6 +78,7 @@ const resourceData = ref({
     }
   ]
 })
+const loading = ref(false)
 
 const queryForm = ref({
   courseName: '',
@@ -104,25 +106,75 @@ const filteredRecords = computed(() =>
   })
 )
 
-function openDetail(record) {
-  currentResource.value = record
-  detailVisible.value = true
+function buildDownloadUrl(fileUrl) {
+  if (!fileUrl) return ''
+  if (/^https?:\/\//i.test(fileUrl)) return fileUrl
+  return new URL(fileUrl, import.meta.env.VITE_API_BASE_URL || window.location.origin).toString()
 }
 
-function mockDownload() {
-  // Mock 下载行为，接入后端后替换为真实下载接口调用
+function downloadResource(record) {
+  const downloadUrl = buildDownloadUrl(record.fileUrl)
+  if (!downloadUrl) {
+    ElMessage.warning('当前资源未配置下载地址')
+    return
+  }
+  window.open(downloadUrl, '_blank', 'noopener')
 }
 
 function resetFilters() {
   queryForm.value.courseName = ''
   queryForm.value.category = ''
 }
+
+async function loadResourceModule() {
+  loading.value = true
+  try {
+    const [profile, page] = await Promise.all([
+      fetchCurrentStudentProfile(),
+      fetchStudentResourcePage({ pageNum: 1, pageSize: 100 })
+    ])
+    resourceData.value.profile = {
+      ...resourceData.value.profile,
+      studentNo: profile.studentNo || resourceData.value.profile.studentNo,
+      studentName: profile.name || resourceData.value.profile.studentName,
+      gradeClass: profile.className || resourceData.value.profile.gradeClass,
+      semester: profile.grade ? `${profile.grade} 当前学籍信息` : resourceData.value.profile.semester,
+      updated_at: profile.updatedAt || resourceData.value.profile.updated_at
+    }
+    resourceData.value.records = page.list
+    resourceData.value.summary = {
+      ...resourceData.value.summary,
+      totalCount: page.list.length,
+      thisWeekCount: page.list.filter((item) => item.uploadTime !== '-').length,
+      courseCount: new Set(page.list.map((item) => item.courseName).filter(Boolean)).size,
+      downloadCount: page.list.reduce((sum, item) => sum + Number(item.downloadCount || 0), 0)
+    }
+  } catch (error) {
+    ElMessage.error('学习资料加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function openDetail(record) {
+  detailVisible.value = true
+  currentResource.value = record
+  try {
+    currentResource.value = await fetchStudentResourceDetail(record.id)
+  } catch (error) {
+    ElMessage.warning('资源详情加载失败，已展示列表中的基础信息')
+  }
+}
+
+onMounted(() => {
+  loadResourceModule()
+})
 </script>
 
 <template>
   <PageShell title="学习资料库" subtitle="我的作业 / 学习资料库">
     <div class="resource-page">
-      <el-card shadow="never" class="profile-card">
+      <el-card v-loading="loading" shadow="never" class="profile-card">
         <div class="profile-title">
           {{ resourceData.profile.studentName }}，以下是你所在班级教师上传的学习资源
         </div>
@@ -161,12 +213,12 @@ function resetFilters() {
         </el-form>
       </el-card>
 
-      <el-card shadow="never" class="table-card">
+      <el-card v-loading="loading" shadow="never" class="table-card">
         <template #header>
           <div class="card-header">资源列表</div>
         </template>
         <el-table :data="filteredRecords" stripe>
-          <el-table-column prop="id" label="资源ID" min-width="110" />
+          <el-table-column prop="resourceId" label="资源ID" min-width="110" />
           <el-table-column prop="title" label="资源名称" min-width="190" />
           <el-table-column prop="courseName" label="课程" min-width="90" />
           <el-table-column prop="teacherName" label="上传教师" min-width="100" />
@@ -177,7 +229,7 @@ function resetFilters() {
           <el-table-column label="操作" width="138" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-              <el-button link @click="mockDownload">
+              <el-button link @click="downloadResource(row)">
                 <el-icon><Download /></el-icon>下载
               </el-button>
             </template>
@@ -186,12 +238,13 @@ function resetFilters() {
       </el-card>
 
       <el-drawer v-model="detailVisible" title="资源详情" size="460px" append-to-body>
-        <div v-if="currentResource" class="detail-panel">
+          <div v-if="currentResource" class="detail-panel">
           <div class="detail-row"><span class="detail-label">资源名称</span><span>{{ currentResource.title }}</span></div>
           <div class="detail-row"><span class="detail-label">课程</span><span>{{ currentResource.courseName }}</span></div>
           <div class="detail-row"><span class="detail-label">上传教师</span><span>{{ currentResource.teacherName }}</span></div>
           <div class="detail-row"><span class="detail-label">资源类型</span><span>{{ currentResource.category }}</span></div>
           <div class="detail-row"><span class="detail-label">文件格式</span><span>{{ currentResource.fileType }}</span></div>
+          <div class="detail-row"><span class="detail-label">文件大小</span><span>{{ currentResource.fileSizeKb ? `${currentResource.fileSizeKb} KB` : '-' }}</span></div>
           <div class="detail-row"><span class="detail-label">上传时间</span><span>{{ currentResource.uploadTime }}</span></div>
           <div class="detail-row"><span class="detail-label">下载次数</span><span>{{ currentResource.downloadCount }}</span></div>
           <div class="comment-block">
@@ -199,10 +252,16 @@ function resetFilters() {
             <div class="comment-content">{{ currentResource.description }}</div>
           </div>
           <div class="timestamps">
-            <div>created_at：{{ currentResource.created_at }}</div>
-            <div>updated_at：{{ currentResource.updated_at }}</div>
+            <div>created_at：{{ currentResource.createdAt }}</div>
+            <div>updated_at：{{ currentResource.updatedAt }}</div>
           </div>
         </div>
+        <template #footer>
+          <div class="drawer-footer">
+            <el-button @click="detailVisible = false">关闭</el-button>
+            <el-button type="primary" @click="downloadResource(currentResource)">下载资源</el-button>
+          </div>
+        </template>
       </el-drawer>
     </div>
   </PageShell>

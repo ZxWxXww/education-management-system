@@ -1,20 +1,38 @@
 <script setup>
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { fetchAdminSettingsOverview } from '../../api/admin/settings'
 
 const router = useRouter()
+const loading = ref(false)
+const overview = ref({
+  systemSettingCount: 0,
+  logStrategyCount: 0,
+  displayTemplateCount: 0,
+  pendingApprovalCount: 0,
+  moduleStatusList: []
+})
 
-// 机构设置一级页 mock 数据（切换真实后端时，请替换为 src/api/admin/settings.js）
-const settingCards = [
-  { label: '系统参数项', value: '42', tip: '已启用 40' },
-  { label: '日志策略', value: '3', tip: '按模块归档' },
-  { label: '展示模板', value: '6', tip: '当前模板 A-02' },
-  { label: '待审批配置', value: '2', tip: '需管理员确认' }
-]
+const settingCards = computed(() => [
+  { label: '系统参数项', value: `${overview.value.systemSettingCount}`, tip: '真实配置项' },
+  { label: '日志策略', value: `${overview.value.logStrategyCount}`, tip: '按模块统计' },
+  { label: '展示模板', value: `${overview.value.displayTemplateCount}`, tip: '当前生效记录' },
+  { label: '待审批配置', value: `${overview.value.pendingApprovalCount}`, tip: '真实待处理数' }
+])
 
-const settingRows = [
-  { module: '日志管理', owner: '运维组', state: '运行中', created_at: '2026-04-05 13:10:02', updated_at: '2026-04-08 09:11:09' },
-  { module: '展示设置', owner: '产品组', state: '运行中', created_at: '2026-04-05 13:14:48', updated_at: '2026-04-08 08:57:33' }
-]
+const settingRows = computed(() => overview.value.moduleStatusList || [])
+
+async function loadOverview() {
+  loading.value = true
+  try {
+    overview.value = await fetchAdminSettingsOverview()
+  } catch (error) {
+    ElMessage.error(error.message || '机构设置总览加载失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 function goLogs() {
   router.push('/admin/settings/logs')
@@ -23,6 +41,10 @@ function goLogs() {
 function goDisplay() {
   router.push('/admin/settings/display')
 }
+
+onMounted(() => {
+  loadOverview()
+})
 </script>
 
 <template>
@@ -48,18 +70,18 @@ function goDisplay() {
 
     <section class="panel">
       <header class="panel-head">
-        <h2>配置模块状态（mock）</h2>
+        <h2>配置模块状态</h2>
       </header>
-      <el-table :data="settingRows" stripe>
+      <el-table v-loading="loading" :data="settingRows" stripe>
         <el-table-column prop="module" label="模块" min-width="180" />
         <el-table-column prop="owner" label="负责团队" min-width="140" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag type="success" effect="light">{{ row.state }}</el-tag>
+            <el-tag :type="row.state === '运行中' ? 'success' : 'warning'" effect="light">{{ row.state }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="created_at" min-width="170" />
-        <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
       </el-table>
     </section>
   </div>

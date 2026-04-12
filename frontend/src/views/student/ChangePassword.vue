@@ -4,11 +4,15 @@ import { ElMessage } from 'element-plus'
 import { Lock, WarningFilled } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
 import PersonalInfo from './PersonalInfo.vue'
+import { useUserStore } from '../../stores/user'
+import { updateStudentPassword } from '../../api/student/profile'
 
 const passwordFormRef = ref()
 const activeTab = ref('profile')
+const submitting = ref(false)
+const userStore = useUserStore()
+userStore.restoreSession()
 
-// 学生账号安全 Mock 数据（切换真实后端时，请替换为 src/api/student/profile.js 的接口调用）
 const passwordForm = reactive({
   oldPassword: '',
   newPassword: '',
@@ -22,10 +26,10 @@ const securityPolicy = [
   '不要与历史 3 次密码重复'
 ]
 
-const loginDevices = [
-  { id: 1, device: 'Windows · Chrome 124', location: '杭州', lastLogin: '2026-04-06 07:42:17', created_at: '2026-04-06 07:42:17', updated_at: '2026-04-06 07:42:17' },
-  { id: 2, device: 'iOS · WeChat 8.0', location: '绍兴', lastLogin: '2026-04-05 20:19:02', created_at: '2026-04-05 20:19:02', updated_at: '2026-04-05 20:19:02' }
-]
+const currentSession = computed(() => ({
+  device: typeof navigator === 'undefined' ? '当前设备' : navigator.userAgent.split(') ')[0]?.replace('Mozilla/5.0 (', '') || '当前设备',
+  identity: userStore.userInfo?.realName || userStore.userInfo?.username || '当前登录用户'
+}))
 
 function validateConfirmPassword(rule, value, callback) {
   if (!value) {
@@ -70,10 +74,21 @@ function resetPasswordForm() {
 }
 
 function submitPasswordForm() {
-  passwordFormRef.value?.validate((valid) => {
+  passwordFormRef.value?.validate(async (valid) => {
     if (!valid) return
-    ElMessage.success('密码修改成功（Mock）')
-    resetPasswordForm()
+    submitting.value = true
+    try {
+      await updateStudentPassword({
+        oldPassword: passwordForm.oldPassword,
+        newPassword: passwordForm.newPassword
+      })
+      ElMessage.success('密码修改成功，请使用新密码重新登录')
+      resetPasswordForm()
+    } catch (error) {
+      ElMessage.error(error.message || '密码修改失败')
+    } finally {
+      submitting.value = false
+    }
   })
 }
 </script>
@@ -110,7 +125,7 @@ function submitPasswordForm() {
               <el-form-item>
                 <div class="action-row">
                   <el-button @click="resetPasswordForm">重置</el-button>
-                  <el-button type="primary" @click="submitPasswordForm">提交修改</el-button>
+                  <el-button type="primary" :loading="submitting" @click="submitPasswordForm">提交修改</el-button>
                 </div>
               </el-form-item>
             </el-form>
@@ -124,11 +139,11 @@ function submitPasswordForm() {
               </ul>
             </article>
             <article class="device-card">
-              <h4>近期登录设备</h4>
+              <h4>当前登录会话</h4>
               <div class="device-list">
-                <div v-for="device in loginDevices" :key="device.id" class="device-item">
-                  <p class="device-item__title">{{ device.device }}</p>
-                  <p class="device-item__meta">{{ device.location }} · {{ device.lastLogin }}</p>
+                <div class="device-item">
+                  <p class="device-item__title">{{ currentSession.device }}</p>
+                  <p class="device-item__meta">{{ currentSession.identity }}</p>
                 </div>
               </div>
             </article>

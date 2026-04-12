@@ -1,10 +1,11 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { CircleCheckFilled, DataAnalysis, DocumentChecked, WarningFilled } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
+import { fetchCurrentStudentProfile } from '../../api/student/profile'
+import { fetchStudentAssignmentSubmissionPage } from '../../api/student/assignment'
 
-// 学生端“我的作业-作业提交记录”Mock 数据
-// 切换真实后端时，请替换为 src/api/student/homeworkSubmissions.js 的接口返回
 const homeworkData = ref({
   profile: {
     studentNo: 'S20260318',
@@ -77,6 +78,7 @@ const homeworkData = ref({
     }
   ]
 })
+const loading = ref(false)
 
 const queryForm = ref({
   status: '',
@@ -128,12 +130,45 @@ function resetFilters() {
   queryForm.value.status = ''
   queryForm.value.courseName = ''
 }
+
+async function loadHomeworkData() {
+  loading.value = true
+  try {
+    const [profile, page] = await Promise.all([
+      fetchCurrentStudentProfile(),
+      fetchStudentAssignmentSubmissionPage({ pageNum: 1, pageSize: 100 })
+    ])
+    homeworkData.value.profile = {
+      ...homeworkData.value.profile,
+      studentNo: profile.studentNo || homeworkData.value.profile.studentNo,
+      studentName: profile.name || homeworkData.value.profile.studentName,
+      gradeClass: profile.className || homeworkData.value.profile.gradeClass,
+      updated_at: profile.updatedAt || homeworkData.value.profile.updated_at
+    }
+    homeworkData.value.records = page.list
+    homeworkData.value.summary = {
+      ...homeworkData.value.summary,
+      totalCount: page.list.length,
+      submittedCount: page.list.filter((item) => item.status === 'submitted' || item.status === 'late').length,
+      onTimeCount: page.list.filter((item) => item.status === 'submitted').length,
+      pendingCount: page.list.filter((item) => item.status === 'pending').length
+    }
+  } catch (error) {
+    ElMessage.error('作业记录加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadHomeworkData()
+})
 </script>
 
 <template>
   <PageShell title="作业提交记录" subtitle="我的作业 / 作业提交记录">
     <div class="submission-page">
-      <el-card shadow="never" class="profile-card">
+      <el-card v-loading="loading" shadow="never" class="profile-card">
         <div class="profile-title">
           {{ homeworkData.profile.studentName }}，这里是你的作业提交进度总览
         </div>
@@ -174,7 +209,7 @@ function resetFilters() {
         </el-form>
       </el-card>
 
-      <el-card shadow="never" class="table-card">
+      <el-card v-loading="loading" shadow="never" class="table-card">
         <template #header>
           <div class="card-header">提交明细</div>
         </template>
@@ -221,8 +256,8 @@ function resetFilters() {
             <div class="comment-content">{{ currentRecord.feedback }}</div>
           </div>
           <div class="timestamps">
-            <div>created_at：{{ currentRecord.created_at }}</div>
-            <div>updated_at：{{ currentRecord.updated_at }}</div>
+            <div>created_at：{{ currentRecord.createdAt }}</div>
+            <div>updated_at：{{ currentRecord.updatedAt }}</div>
           </div>
         </div>
       </el-drawer>

@@ -3,79 +3,113 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
+import { fetchCurrentStudentProfile, updateCurrentStudentProfile } from '../../api/student/profile'
+import { fetchStudentNotificationPage, markStudentNotificationRead } from '../../api/student/notification'
+import { fetchStudentBillDetail, fetchStudentBillPage, fetchStudentHourPackageSummary } from '../../api/student/bill'
+import { fetchStudentCoursePage } from '../../api/student/course'
+import { fetchStudentAssignmentSubmissionPage } from '../../api/student/assignment'
+import { fetchStudentScorePage } from '../../api/student/score'
+import { ASSIGNMENT_STATUS, BILL_STATUS, BILL_STATUS_OPTIONS, HOUR_PACKAGE_STATUS_OPTIONS, getStatusMeta } from '../../constants/status'
 
 const props = defineProps({
   embedded: { type: Boolean, default: false }
 })
 
-// 学生个人信息 Mock 数据（切换真实后端时，请替换为 src/api/student/profile.js 的接口返回）
-const initialProfile = {
-  studentNo: 'STU-2026-0931',
-  name: '李思源',
-  gender: '男',
-  grade: '高二',
-  className: '高二（3）班',
-  phone: '13900001122',
-  email: 'li.siyuan@student.edusmart.com',
-  guardianName: '李建国',
-  guardianPhone: '13812345678',
-  address: '浙江省杭州市西湖区文二路 188 号',
-  intro: '学习目标明确，擅长理科综合，近期重点提升英语写作与物理实验题稳定性。',
-  created_at: '2026-04-06 08:00:00',
-  updated_at: '2026-04-06 08:00:00'
-}
-
-const profileForm = reactive({ ...initialProfile })
-const BILL_NOTICE_STORAGE_KEY = 'edu_bill_notifications'
-const billNotices = ref([])
-const billDialogVisible = ref(false)
-const currentBillNotice = ref(null)
-
-const subjectTags = ['数学拔高', '物理竞赛', '英语写作', '周测稳定']
-
-const learningStats = [
-  { label: '本学期出勤率', value: '98.6%' },
-  { label: '作业提交率', value: '96.2%' },
-  { label: '最近月考排名', value: '年级 37/426' },
-  { label: '班级综合评级', value: 'A' }
-]
-
-const unreadNoticeCount = computed(() =>
-  billNotices.value.filter((notice) => notice.paymentStatus !== 'paid').length
-)
-
-function handleReset() {
-  Object.assign(profileForm, initialProfile)
-  ElMessage.success('已恢复为初始资料')
-}
-
-function handleSave() {
-  profileForm.updated_at = '2026-04-06 09:10:00'
-  ElMessage.success('个人信息保存成功（Mock）')
-}
-
-function getStoredBillNotices() {
-  try {
-    const raw = localStorage.getItem(BILL_NOTICE_STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
-  } catch (error) {
-    return []
+function createEmptyProfile() {
+  return {
+    userId: null,
+    studentProfileId: null,
+    studentNo: '-',
+    name: '',
+    gender: '未知',
+    grade: '',
+    className: '',
+    phone: '',
+    email: '',
+    guardianName: '',
+    guardianPhone: '',
+    address: '',
+    intro: '',
+    createdAt: '-',
+    updatedAt: '-'
   }
 }
 
-function loadBillNotices() {
-  const notices = getStoredBillNotices()
-  billNotices.value = notices.filter(
-    (item) => item.noticeType === 'bill' && item.studentName === profileForm.name
-  )
+const profileForm = reactive(createEmptyProfile())
+const profileSnapshot = ref(createEmptyProfile())
+const profileLoading = ref(false)
+const saveLoading = ref(false)
+const announcementLoading = ref(false)
+const billLoading = ref(false)
+const hourPackageLoading = ref(false)
+const announcementList = ref([])
+const billList = ref([])
+const hourPackageSummary = ref({
+  totalRemainingHours: 0,
+  activePackageCount: 0,
+  packages: [],
+  deductions: []
+})
+const courseList = ref([])
+const assignmentList = ref([])
+const scoreList = ref([])
+const billDialogVisible = ref(false)
+const currentBill = ref(null)
+const billDetailLoading = ref(false)
+
+const subjectTags = computed(() => courseList.value.map((item) => item.courseName).filter(Boolean).slice(0, 4))
+const learningStats = computed(() => {
+  const totalAssignments = assignmentList.value.length
+  const submittedAssignments = assignmentList.value.filter(
+    (item) => item.status === ASSIGNMENT_STATUS.SUBMITTED || item.status === ASSIGNMENT_STATUS.LATE
+  ).length
+  const avgScore = scoreList.value.length
+    ? (scoreList.value.reduce((sum, item) => sum + Number(item.score || 0), 0) / scoreList.value.length).toFixed(1)
+    : '0.0'
+  return [
+    { label: '当前课程数', value: `${courseList.value.length} 门` },
+    { label: '作业提交率', value: `${totalAssignments ? Math.round((submittedAssignments / totalAssignments) * 100) : 0}%` },
+    { label: '最近成绩均分', value: avgScore },
+    { label: '未读通知', value: `${unreadAnnouncementCount.value} 条` }
+  ]
+})
+
+const unreadAnnouncementCount = computed(() =>
+  announcementList.value.filter((item) => !item.isRead).length
+)
+const unpaidBillCount = computed(() =>
+  billList.value.filter((item) => item.paymentStatus !== 'paid').length
+)
+const recentHourPackages = computed(() => hourPackageSummary.value.packages.slice(0, 3))
+const recentHourDeductions = computed(() => hourPackageSummary.value.deductions.slice(0, 5))
+const hourPackageStats = computed(() => [
+  { label: '剩余课时', value: `${hourPackageSummary.value.totalRemainingHours.toFixed(2)} 课时` },
+  { label: '生效课时包', value: `${hourPackageSummary.value.activePackageCount} 个` }
+])
+
+function syncProfileForm(profile) {
+  Object.assign(profileForm, createEmptyProfile(), profile)
+  profileSnapshot.value = { ...profileForm }
+}
+
+function handleReset() {
+  Object.assign(profileForm, profileSnapshot.value)
+  ElMessage.success('已恢复为最近一次同步的真实资料')
+}
+
+async function handleSave() {
+  saveLoading.value = true
+  try {
+    await updateCurrentStudentProfile(profileForm)
+    await loadProfile()
+    ElMessage.success('个人信息保存成功')
+  } finally {
+    saveLoading.value = false
+  }
 }
 
 function statusTagType(status) {
-  if (status === '已完成') return 'success'
-  if (status === '已逾期') return 'danger'
-  if (status === '已作废') return 'info'
-  return 'warning'
+  return getStatusMeta(BILL_STATUS_OPTIONS, status).tagType
 }
 
 function paymentTagType(status) {
@@ -86,35 +120,87 @@ function paymentTagText(status) {
   return status === 'paid' ? '已支付' : '待支付'
 }
 
-function openBillNotice(notice) {
-  currentBillNotice.value = { ...notice }
-  billDialogVisible.value = true
+function hourPackageTagType(status) {
+  return getStatusMeta(HOUR_PACKAGE_STATUS_OPTIONS, status).tagType
 }
 
-function mockPayBill() {
-  if (!currentBillNotice.value || currentBillNotice.value.paymentStatus === 'paid') return
-  const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
-  const targetId = currentBillNotice.value.noticeId
-  const allNotices = getStoredBillNotices()
-  const next = allNotices.map((item) => {
-    if (item.noticeId !== targetId) return item
-    return {
-      ...item,
-      paymentStatus: 'paid',
-      billStatus: '已完成',
-      paidAmount: item.amount,
-      updated_at: now
-    }
-  })
-  localStorage.setItem(BILL_NOTICE_STORAGE_KEY, JSON.stringify(next))
-  loadBillNotices()
-  const updated = next.find((item) => item.noticeId === targetId)
-  currentBillNotice.value = updated ? { ...updated } : null
-  ElMessage.success('支付成功（模拟）')
+async function openBillDetail(bill) {
+  billDetailLoading.value = true
+  billDialogVisible.value = true
+  try {
+    currentBill.value = await fetchStudentBillDetail(bill.id)
+  } finally {
+    billDetailLoading.value = false
+  }
+}
+
+async function openAnnouncement(item) {
+  if (item.isRead) return
+  await markStudentNotificationRead(item.id)
+  item.isRead = true
+}
+
+async function loadProfile() {
+  profileLoading.value = true
+  try {
+    const profile = await fetchCurrentStudentProfile()
+    syncProfileForm(profile)
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+async function loadAnnouncements() {
+  announcementLoading.value = true
+  try {
+    const page = await fetchStudentNotificationPage({ pageNum: 1, pageSize: 5 })
+    announcementList.value = page.list
+  } finally {
+    announcementLoading.value = false
+  }
+}
+
+async function loadBills() {
+  billLoading.value = true
+  try {
+    const page = await fetchStudentBillPage({ pageNum: 1, pageSize: 5 })
+    billList.value = page.list
+  } finally {
+    billLoading.value = false
+  }
+}
+
+async function loadHourPackages() {
+  hourPackageLoading.value = true
+  try {
+    hourPackageSummary.value = await fetchStudentHourPackageSummary()
+  } finally {
+    hourPackageLoading.value = false
+  }
+}
+
+async function loadStudyData() {
+  const [coursePage, assignmentPage, scorePage] = await Promise.all([
+    fetchStudentCoursePage({ pageNum: 1, pageSize: 20 }),
+    fetchStudentAssignmentSubmissionPage({ pageNum: 1, pageSize: 20 }),
+    fetchStudentScorePage({ pageNum: 1, pageSize: 20 })
+  ])
+  courseList.value = coursePage.list
+  assignmentList.value = assignmentPage.list
+  scoreList.value = scorePage.list
+}
+
+async function loadPageData() {
+  try {
+    await Promise.all([loadProfile(), loadAnnouncements(), loadBills(), loadHourPackages(), loadStudyData()])
+  } catch (error) {
+    // 统一请求层已处理通用报错，这里只补充页面级上下文提示。
+    ElMessage.error('学生个人中心数据加载失败，请稍后重试')
+  }
 }
 
 onMounted(() => {
-  loadBillNotices()
+  loadPageData()
 })
 
 const shellProps = {
@@ -126,7 +212,7 @@ const shellProps = {
 <template>
   <component :is="props.embedded ? 'div' : PageShell" v-bind="props.embedded ? {} : shellProps">
     <div class="personal-info">
-      <section class="profile-overview">
+      <section v-loading="profileLoading" class="profile-overview">
         <div class="avatar-box">{{ profileForm.name.slice(0, 1) }}</div>
         <p class="profile-name">{{ profileForm.name }}</p>
         <p class="profile-meta">{{ profileForm.grade }} · {{ profileForm.className }}</p>
@@ -144,16 +230,16 @@ const shellProps = {
           </div>
           <div class="meta-item">
             <span>创建时间</span>
-            <strong>{{ profileForm.created_at }}</strong>
+            <strong>{{ profileForm.createdAt }}</strong>
           </div>
           <div class="meta-item">
             <span>更新时间</span>
-            <strong>{{ profileForm.updated_at }}</strong>
+            <strong>{{ profileForm.updatedAt }}</strong>
           </div>
         </div>
       </section>
 
-      <section class="profile-form">
+      <section v-loading="profileLoading" class="profile-form">
         <div class="section-head">
           <h3 class="section-title">基础信息</h3>
           <el-icon><EditPen /></el-icon>
@@ -166,10 +252,7 @@ const shellProps = {
             <el-input v-model="profileForm.name" />
           </el-form-item>
           <el-form-item label="性别">
-            <el-select v-model="profileForm.gender" style="width: 100%">
-              <el-option label="男" value="男" />
-              <el-option label="女" value="女" />
-            </el-select>
+            <el-input v-model="profileForm.gender" disabled />
           </el-form-item>
           <el-form-item label="年级">
             <el-select v-model="profileForm.grade" style="width: 100%">
@@ -211,89 +294,172 @@ const shellProps = {
 
         <div class="notice-head">
           <h3 class="section-title section-title--spaced">通知公告</h3>
-          <el-tag :type="unreadNoticeCount > 0 ? 'warning' : 'success'" effect="light">
-            未处理账单 {{ unreadNoticeCount }} 条
+          <el-tag :type="unreadAnnouncementCount > 0 ? 'warning' : 'success'" effect="light">
+            未读通知 {{ unreadAnnouncementCount }} 条
           </el-tag>
         </div>
-        <div v-if="billNotices.length > 0" class="notice-list">
-          <article v-for="notice in billNotices" :key="notice.noticeId" class="notice-item">
+        <div v-loading="announcementLoading" v-if="announcementList.length > 0" class="notice-list">
+          <article v-for="notice in announcementList" :key="notice.id" class="notice-item">
             <div class="notice-main">
               <p class="notice-title">{{ notice.title }}</p>
               <p class="notice-content">{{ notice.content }}</p>
               <p class="notice-meta">
-                财单号：{{ notice.billNo }} ｜ 类型：{{ notice.billType }} ｜ 金额：¥ {{ notice.amount.toLocaleString('zh-CN') }}
+                发布时间：{{ notice.publishTime }} ｜ 类型：{{ notice.noticeType || '公告' }}
               </p>
             </div>
             <div class="notice-actions">
-              <el-tag :type="paymentTagType(notice.paymentStatus)" effect="light">
-                {{ paymentTagText(notice.paymentStatus) }}
+              <el-tag :type="notice.isRead ? 'success' : 'warning'" effect="light">
+                {{ notice.isRead ? '已读' : '未读' }}
               </el-tag>
-              <el-button type="primary" link @click="openBillNotice(notice)">查看账单</el-button>
+              <el-button type="primary" link @click="openAnnouncement(notice)">
+                {{ notice.isRead ? '已查看' : '标为已读' }}
+              </el-button>
             </div>
           </article>
         </div>
-        <el-empty v-else description="暂无账单通知" :image-size="86" />
+        <el-empty v-else description="暂无通知公告" :image-size="86" />
+
+        <div class="notice-head">
+          <h3 class="section-title section-title--spaced">账单信息</h3>
+          <el-tag :type="unpaidBillCount > 0 ? 'warning' : 'success'" effect="light">
+            待处理账单 {{ unpaidBillCount }} 条
+          </el-tag>
+        </div>
+        <div v-loading="billLoading" v-if="billList.length > 0" class="notice-list">
+          <article v-for="bill in billList" :key="bill.id" class="notice-item">
+            <div class="notice-main">
+              <p class="notice-title">{{ bill.billTypeLabel }}</p>
+              <p class="notice-content">{{ bill.remark || '暂无账单备注' }}</p>
+              <p class="notice-meta">
+                财单号：{{ bill.billNo }} ｜ 班级：{{ bill.className }} ｜ 到期：{{ bill.dueDate }}
+              </p>
+            </div>
+            <div class="notice-actions">
+              <el-tag :type="paymentTagType(bill.paymentStatus)" effect="light">
+                {{ paymentTagText(bill.paymentStatus) }}
+              </el-tag>
+              <el-button type="primary" link @click="openBillDetail(bill)">查看账单</el-button>
+            </div>
+          </article>
+        </div>
+        <el-empty v-else description="暂无账单信息" :image-size="86" />
+
+        <div class="notice-head">
+          <h3 class="section-title section-title--spaced">课时包与扣课</h3>
+          <el-tag :type="hourPackageSummary.totalRemainingHours > 0 ? 'success' : 'info'" effect="light">
+            剩余 {{ hourPackageSummary.totalRemainingHours.toFixed(2) }} 课时
+          </el-tag>
+        </div>
+        <div v-loading="hourPackageLoading" class="hour-package-panel">
+          <div class="hour-package-grid">
+            <div v-for="item in hourPackageStats" :key="item.label" class="stat-item">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+
+          <div class="hour-package-block">
+            <div class="mini-head">
+              <strong>当前课时包</strong>
+              <span>{{ recentHourPackages.length }} 条</span>
+            </div>
+            <div v-if="recentHourPackages.length > 0" class="notice-list">
+              <article v-for="item in recentHourPackages" :key="item.id" class="notice-item">
+                <div class="notice-main">
+                  <p class="notice-title">{{ item.courseName }}</p>
+                  <p class="notice-content">
+                    总课时 {{ item.totalHours.toFixed(2) }} ｜ 已用 {{ item.usedHours.toFixed(2) }} ｜ 剩余 {{ item.remainingHours.toFixed(2) }}
+                  </p>
+                  <p class="notice-meta">
+                    生效：{{ item.effectiveDate }} ｜ 到期：{{ item.expireDate }} ｜ 更新：{{ item.updatedAt }}
+                  </p>
+                </div>
+                <div class="notice-actions">
+                  <el-tag :type="hourPackageTagType(item.statusCode)" effect="light">
+                    {{ item.statusLabel }}
+                  </el-tag>
+                </div>
+              </article>
+            </div>
+            <el-empty v-else description="暂无课时包" :image-size="72" />
+          </div>
+
+          <div class="hour-package-block">
+            <div class="mini-head">
+              <strong>最近扣课</strong>
+              <span>{{ recentHourDeductions.length }} 条</span>
+            </div>
+            <div v-if="recentHourDeductions.length > 0" class="notice-list">
+              <article v-for="item in recentHourDeductions" :key="item.id" class="notice-item">
+                <div class="notice-main">
+                  <p class="notice-title">{{ item.courseName }} · {{ item.className }}</p>
+                  <p class="notice-content">扣减 {{ item.deductHours.toFixed(2) }} 课时</p>
+                  <p class="notice-meta">
+                    业务日期：{{ item.bizDate }} ｜ 记录时间：{{ item.createdAt }}<span v-if="item.remark"> ｜ {{ item.remark }}</span>
+                  </p>
+                </div>
+              </article>
+            </div>
+            <el-empty v-else description="暂无扣课记录" :image-size="72" />
+          </div>
+        </div>
 
         <div class="action-row">
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="primary" @click="handleSave">保存信息</el-button>
+          <el-button type="primary" :loading="saveLoading" @click="handleSave">保存信息</el-button>
         </div>
       </section>
     </div>
 
     <el-dialog v-model="billDialogVisible" title="账单详情" width="520px">
-      <div v-if="currentBillNotice" class="bill-detail">
+      <div v-loading="billDetailLoading" v-if="currentBill" class="bill-detail">
         <div class="bill-row">
           <span>财单号</span>
-          <strong>{{ currentBillNotice.billNo }}</strong>
-        </div>
-        <div class="bill-row">
-          <span>学员姓名</span>
-          <strong>{{ currentBillNotice.studentName }}</strong>
+          <strong>{{ currentBill.billNo }}</strong>
         </div>
         <div class="bill-row">
           <span>班级</span>
-          <strong>{{ currentBillNotice.className }}</strong>
+          <strong>{{ currentBill.className }}</strong>
         </div>
         <div class="bill-row">
           <span>账单类型</span>
-          <strong>{{ currentBillNotice.billType }}</strong>
+          <strong>{{ currentBill.billTypeLabel }}</strong>
         </div>
         <div class="bill-row">
           <span>应收金额</span>
-          <strong>¥ {{ Number(currentBillNotice.amount || 0).toLocaleString('zh-CN') }}</strong>
+          <strong>¥ {{ Number(currentBill.amount || 0).toLocaleString('zh-CN') }}</strong>
         </div>
         <div class="bill-row">
           <span>实收金额</span>
-          <strong>¥ {{ Number(currentBillNotice.paidAmount || 0).toLocaleString('zh-CN') }}</strong>
+          <strong>¥ {{ Number(currentBill.paidAmount || 0).toLocaleString('zh-CN') }}</strong>
         </div>
         <div class="bill-row">
           <span>账单状态</span>
-          <el-tag :type="statusTagType(currentBillNotice.billStatus)" effect="light">
-            {{ currentBillNotice.billStatus }}
+          <el-tag :type="statusTagType(currentBill.billStatusCode)" effect="light">
+            {{ currentBill.billStatusLabel }}
           </el-tag>
         </div>
         <div class="bill-row">
           <span>支付状态</span>
-          <el-tag :type="paymentTagType(currentBillNotice.paymentStatus)" effect="light">
-            {{ paymentTagText(currentBillNotice.paymentStatus) }}
+          <el-tag :type="paymentTagType(currentBill.paymentStatus)" effect="light">
+            {{ paymentTagText(currentBill.paymentStatus) }}
           </el-tag>
         </div>
         <div class="bill-row">
-          <span>通知时间</span>
-          <strong>{{ currentBillNotice.created_at }}</strong>
+          <span>到期时间</span>
+          <strong>{{ currentBill.dueDate }}</strong>
+        </div>
+        <div class="bill-row">
+          <span>更新时间</span>
+          <strong>{{ currentBill.updatedAt }}</strong>
         </div>
       </div>
       <template #footer>
         <div class="bill-footer">
           <el-button @click="billDialogVisible = false">关闭</el-button>
-          <el-button
-            type="primary"
-            :disabled="!currentBillNotice || currentBillNotice.paymentStatus === 'paid'"
-            @click="mockPayBill"
-          >
-            模拟支付
-          </el-button>
+          <span class="bill-footer__tip" v-if="currentBill && currentBill.billStatusCode === BILL_STATUS.PENDING">
+            当前仅支持查看真实账单，请联系管理员完成支付登记
+          </span>
         </div>
       </template>
     </el-dialog>
@@ -469,6 +635,38 @@ const shellProps = {
   gap: 10px;
 }
 
+.hour-package-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hour-package-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hour-package-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mini-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.mini-head strong {
+  color: #111827;
+  font-size: 13px;
+}
+
 .notice-item {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
@@ -553,7 +751,8 @@ const shellProps = {
 
 @media (max-width: 768px) {
   .form-grid,
-  .stat-grid {
+  .stat-grid,
+  .hour-package-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -573,6 +772,7 @@ const shellProps = {
 :global(html.dark) .profile-name,
 :global(html.dark) .meta-item strong,
 :global(html.dark) .section-title,
+:global(html.dark) .mini-head strong,
 :global(html.dark) .stat-item strong,
 :global(html.dark) .notice-title,
 :global(html.dark) .bill-row strong {
@@ -582,6 +782,7 @@ const shellProps = {
 :global(html.dark) .profile-meta,
 :global(html.dark) .meta-item,
 :global(html.dark) .section-head .el-icon,
+:global(html.dark) .mini-head,
 :global(html.dark) .stat-item span,
 :global(html.dark) .notice-content,
 :global(html.dark) .notice-meta,

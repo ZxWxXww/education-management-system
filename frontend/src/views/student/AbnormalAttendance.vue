@@ -1,90 +1,12 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Bell, Calendar, CircleClose, Clock, Search } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
+import { fetchStudentAttendanceExceptionPage } from '../../api/student/attendance'
 
-// 学生端“我的考勤 - 考勤异常”Mock 数据
-// 切换真实后端时，请替换为 src/api/student/attendance.js 的接口返回
-const attendanceAbnormalMock = ref({
-  profile: {
-    studentNo: 'S20260318',
-    studentName: '李明',
-    className: '高二（3）班',
-    semester: '2025-2026 学年第二学期',
-    created_at: '2026-02-18 09:20:00',
-    updated_at: '2026-04-06 11:10:00'
-  },
-  summary: {
-    monthAbnormalCount: 4,
-    lateCount: 2,
-    absentCount: 1,
-    leaveEarlyCount: 1,
-    created_at: '2026-04-06 11:10:00',
-    updated_at: '2026-04-06 11:10:00'
-  },
-  records: [
-    {
-      id: 'ATT-S-20260403-001',
-      date: '2026-04-03',
-      weekDay: '周五',
-      courseName: '数学',
-      classTime: '08:00 - 09:40',
-      abnormalType: '迟到',
-      status: '已确认',
-      checkTime: '2026-04-03 08:11:00',
-      teacherName: '王老师',
-      reason: '地铁晚点，入班延后 11 分钟',
-      handleNote: '已登记，提醒次日提前出门',
-      created_at: '2026-04-03 08:11:00',
-      updated_at: '2026-04-03 09:00:00'
-    },
-    {
-      id: 'ATT-S-20260327-002',
-      date: '2026-03-27',
-      weekDay: '周五',
-      courseName: '物理',
-      classTime: '14:00 - 15:40',
-      abnormalType: '缺勤',
-      status: '需补充说明',
-      checkTime: '2026-03-27 14:05:00',
-      teacherName: '陈老师',
-      reason: '身体不适请假，家长已联系班主任',
-      handleNote: '请于 24 小时内补交请假材料',
-      created_at: '2026-03-27 14:05:00',
-      updated_at: '2026-03-27 16:30:00'
-    },
-    {
-      id: 'ATT-S-20260320-003',
-      date: '2026-03-20',
-      weekDay: '周五',
-      courseName: '英语',
-      classTime: '10:10 - 11:50',
-      abnormalType: '早退',
-      status: '已确认',
-      checkTime: '2026-03-20 11:36:00',
-      teacherName: '刘老师',
-      reason: '参加校级竞赛集训，提前离开 14 分钟',
-      handleNote: '已与教务老师确认，不计入纪律扣分',
-      created_at: '2026-03-20 11:36:00',
-      updated_at: '2026-03-20 12:20:00'
-    },
-    {
-      id: 'ATT-S-20260312-004',
-      date: '2026-03-12',
-      weekDay: '周四',
-      courseName: '化学',
-      classTime: '19:00 - 20:40',
-      abnormalType: '迟到',
-      status: '已确认',
-      checkTime: '2026-03-12 19:08:00',
-      teacherName: '赵老师',
-      reason: '晚高峰交通拥堵',
-      handleNote: '已完成提醒',
-      created_at: '2026-03-12 19:08:00',
-      updated_at: '2026-03-12 20:00:00'
-    }
-  ]
-})
+const loading = ref(false)
+const attendanceRecords = ref([])
 
 const filterForm = ref({
   keyword: '',
@@ -110,21 +32,22 @@ const detailVisible = ref(false)
 const selectedRecord = ref(null)
 
 const summaryCards = computed(() => [
-  { key: 'monthAbnormalCount', title: '本月异常次数', value: `${attendanceAbnormalMock.value.summary.monthAbnormalCount}`, icon: Bell, tone: 'blue' },
-  { key: 'lateCount', title: '迟到次数', value: `${attendanceAbnormalMock.value.summary.lateCount}`, icon: Clock, tone: 'orange' },
-  { key: 'absentCount', title: '缺勤次数', value: `${attendanceAbnormalMock.value.summary.absentCount}`, icon: CircleClose, tone: 'red' },
-  { key: 'leaveEarlyCount', title: '早退次数', value: `${attendanceAbnormalMock.value.summary.leaveEarlyCount}`, icon: Calendar, tone: 'purple' }
+  { key: 'monthAbnormalCount', title: '异常总数', value: `${attendanceRecords.value.length}`, icon: Bell, tone: 'blue' },
+  { key: 'lateCount', title: '迟到次数', value: `${attendanceRecords.value.filter((item) => item.abnormalType === '迟到').length}`, icon: Clock, tone: 'orange' },
+  { key: 'absentCount', title: '缺勤次数', value: `${attendanceRecords.value.filter((item) => item.abnormalType === '缺勤').length}`, icon: CircleClose, tone: 'red' },
+  { key: 'leaveEarlyCount', title: '早退次数', value: `${attendanceRecords.value.filter((item) => item.abnormalType === '早退').length}`, icon: Calendar, tone: 'purple' }
 ])
 
 const filteredRecords = computed(() => {
   const keyword = filterForm.value.keyword.trim()
   const [startDate, endDate] = filterForm.value.dateRange || []
-  return attendanceAbnormalMock.value.records.filter((item) => {
+  return attendanceRecords.value.filter((item) => {
     const matchKeyword =
       !keyword ||
       item.courseName.includes(keyword) ||
       item.teacherName.includes(keyword) ||
-      item.reason.includes(keyword)
+      item.reason.includes(keyword) ||
+      item.handleNote.includes(keyword)
     const matchType = !filterForm.value.abnormalType || item.abnormalType === filterForm.value.abnormalType
     const matchStatus = !filterForm.value.status || item.status === filterForm.value.status
     const matchDate = !startDate || !endDate || (item.date >= startDate && item.date <= endDate)
@@ -133,12 +56,25 @@ const filteredRecords = computed(() => {
 })
 
 const latestAbnormal = computed(() => filteredRecords.value[0] || null)
+const latestUpdatedAt = computed(() => attendanceRecords.value[0]?.updatedAt || '-')
 
 function resetFilters() {
   filterForm.value.keyword = ''
   filterForm.value.abnormalType = ''
   filterForm.value.status = ''
   filterForm.value.dateRange = []
+}
+
+async function loadAttendanceExceptions() {
+  loading.value = true
+  try {
+    const page = await fetchStudentAttendanceExceptionPage({ pageNum: 1, pageSize: 200 })
+    attendanceRecords.value = page.list
+  } catch (error) {
+    ElMessage.error('学生异常考勤加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 function openDetail(record) {
@@ -156,18 +92,22 @@ function getTypeTag(type) {
 function getStatusTag(status) {
   return status === '需补充说明' ? 'warning' : 'success'
 }
+
+onMounted(() => {
+  loadAttendanceExceptions()
+})
 </script>
 
 <template>
   <PageShell title="考勤异常" subtitle="我的考勤 / 考勤异常">
     <div class="student-abnormal-page">
-      <el-card shadow="never" class="profile-card">
+      <el-card v-loading="loading" shadow="never" class="profile-card">
         <div class="profile-main">
-          <div class="profile-title">{{ attendanceAbnormalMock.profile.studentName }}，以下是你的考勤异常记录</div>
+          <div class="profile-title">以下是你的真实考勤异常记录</div>
           <div class="profile-meta">
-            学号：{{ attendanceAbnormalMock.profile.studentNo }} ｜ 班级：{{ attendanceAbnormalMock.profile.className }} ｜ 学期：{{ attendanceAbnormalMock.profile.semester }}
+            当前已同步 {{ attendanceRecords.length }} 条异常记录，可按课程、异常类型和日期筛选
           </div>
-          <div class="profile-time">最近更新时间：{{ attendanceAbnormalMock.profile.updated_at }}</div>
+          <div class="profile-time">最近更新时间：{{ latestUpdatedAt }}</div>
         </div>
       </el-card>
 
@@ -209,7 +149,7 @@ function getStatusTag(status) {
             />
           </el-form-item>
           <el-form-item class="filter-actions">
-            <el-button type="primary" :icon="Search">查询</el-button>
+            <el-button type="primary" :icon="Search" @click="loadAttendanceExceptions">刷新真实数据</el-button>
             <el-button @click="resetFilters">重置</el-button>
           </el-form-item>
         </el-form>
@@ -217,7 +157,7 @@ function getStatusTag(status) {
 
       <el-row :gutter="16">
         <el-col :xs="24" :sm="24" :md="24" :lg="16" :xl="16">
-          <el-card shadow="never" class="table-card">
+          <el-card v-loading="loading" shadow="never" class="table-card">
             <template #header>
               <div class="panel-title">异常记录明细（{{ filteredRecords.length }} 条）</div>
             </template>
@@ -298,8 +238,8 @@ function getStatusTag(status) {
             <div>{{ selectedRecord.handleNote }}</div>
           </div>
           <div class="timestamps">
-            <div>created_at：{{ selectedRecord.created_at }}</div>
-            <div>updated_at：{{ selectedRecord.updated_at }}</div>
+            <div>创建时间：{{ selectedRecord.createdAt }}</div>
+            <div>更新时间：{{ selectedRecord.updatedAt }}</div>
           </div>
         </div>
       </el-drawer>

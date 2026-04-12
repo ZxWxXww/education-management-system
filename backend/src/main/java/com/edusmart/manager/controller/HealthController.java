@@ -1,6 +1,6 @@
 package com.edusmart.manager.controller;
 
-import com.edusmart.manager.common.ApiResponse;
+import com.edusmart.manager.common.Result;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -9,8 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class HealthController {
     @GetMapping("/health")
-    public ApiResponse<String> health() {
-        return ApiResponse.success("ok");
+    public Result<String> health() {
+        return Result.success("ok");
     }
 }
-

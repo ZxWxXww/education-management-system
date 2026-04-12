@@ -1,29 +1,38 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { fetchAdminReportOverview } from '../../api/admin/report'
 
 const router = useRouter()
-
-// 数据报表一级页 mock 数据（切换真实后端时，请替换为 src/api/admin/report.js）
-const reportCards = [
-  { label: '可用报表模板', value: '18', tip: '日报/周报/月报' },
-  { label: '今日生成报表', value: '26', tip: '自动 + 手动' },
-  { label: '下载次数', value: '73', tip: '最近24小时' },
-  { label: '对比任务', value: '9', tip: '待完成 2' }
-]
-
-const hotReports = [
-  { name: '班级完课率周报', owner: '教务处', created_at: '2026-04-07 18:03:42', updated_at: '2026-04-08 09:12:11' },
-  { name: '学科提分月报', owner: '教学运营', created_at: '2026-04-06 11:20:03', updated_at: '2026-04-08 08:44:29' },
-  { name: '校区考勤异常日报', owner: '学管部', created_at: '2026-04-07 21:01:19', updated_at: '2026-04-08 07:58:20' }
-]
+const loading = ref(false)
+const reportCards = ref([])
+const hotReports = ref([])
 
 function goComparative() {
   router.push('/admin/reports/comparative')
 }
+
+async function loadReports() {
+  loading.value = true
+  try {
+    const data = await fetchAdminReportOverview()
+    reportCards.value = data.reportCards
+    hotReports.value = data.hotReports
+  } catch (error) {
+    ElMessage.error(error.message || '数据报表加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadReports()
+})
 </script>
 
 <template>
-  <div class="reports-page">
+  <div v-loading="loading" class="reports-page">
     <section class="page-head">
       <div>
         <h1 class="title">数据报表</h1>
@@ -31,7 +40,6 @@ function goComparative() {
       </div>
       <div class="actions">
         <el-button @click="goComparative">对比分析</el-button>
-        <el-button type="primary">新建报表任务</el-button>
       </div>
     </section>
 
@@ -45,13 +53,13 @@ function goComparative() {
 
     <section class="panel">
       <header class="panel-head">
-        <h2>热门报表（mock）</h2>
+        <h2>真实报表总览</h2>
       </header>
       <el-table :data="hotReports" stripe>
         <el-table-column prop="name" label="报表名称" min-width="220" />
         <el-table-column prop="owner" label="负责部门" min-width="140" />
-        <el-table-column prop="created_at" label="created_at" min-width="170" />
-        <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
       </el-table>
     </section>
   </div>

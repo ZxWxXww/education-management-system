@@ -1,15 +1,15 @@
 package com.edusmart.manager.service.admin;
 
 import com.edusmart.manager.common.PageData;
+import com.edusmart.manager.dto.admin.AdminRolePageItemDTO;
 import com.edusmart.manager.dto.admin.RoleSaveDTO;
-import com.edusmart.manager.entity.EduRoleEntity;
 
 import java.util.List;
 
 public interface AdminRoleService {
-    PageData<EduRoleEntity> page(long current, long size, String keyword);
+    PageData<AdminRolePageItemDTO> page(long current, long size, String keyword);
 
-    EduRoleEntity getById(Long id);
+    AdminRolePageItemDTO getById(Long id);
 
     Long create(RoleSaveDTO dto);
 

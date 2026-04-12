@@ -1,72 +1,54 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Key, UserFilled } from '@element-plus/icons-vue'
 import PageShell from '../../components/PageShell.vue'
+import {
+  assignAdminUserRoles,
+  createAuthorizedAdminUser,
+  fetchAdminUserAuthorizationPage
+} from '../../api/admin/roleAuth'
 
-// 管理员端“用户管理-用户角色授权”Mock 数据
-// 切换真实后端时，请替换为 src/api/admin/userAuthorization.js 的接口返回
-const userAuthRows = ref([
-  {
-    id: 'U-10001',
-    name: '陈海峰',
-    role: '管理员',
-    permissions: ['用户查看', '用户编辑', '角色分配', '系统配置'],
-    status: '启用',
-    created_at: '2026-04-05 09:12:33',
-    updated_at: '2026-04-09 10:18:06'
-  },
-  {
-    id: 'U-10018',
-    name: '林若曦',
-    role: '教师',
-    permissions: ['课程查看', '作业管理', '成绩录入'],
-    status: '启用',
-    created_at: '2026-03-28 11:06:22',
-    updated_at: '2026-04-09 09:02:12'
-  },
-  {
-    id: 'U-10326',
-    name: '王子涵',
-    role: '学生',
-    permissions: ['课程查看', '作业提交', '成绩查看'],
-    status: '启用',
-    created_at: '2026-02-19 16:55:05',
-    updated_at: '2026-04-08 16:45:26'
-  }
-])
-
-const roleOptions = ['管理员', '教师', '学生']
-const permissionOptions = [
-  '用户查看',
-  '用户编辑',
-  '角色分配',
-  '系统配置',
-  '课程查看',
-  '作业管理',
-  '成绩录入',
-  '作业提交',
-  '成绩查看'
-]
+const loading = ref(false)
+const saveLoading = ref(false)
+const createLoading = ref(false)
+const userAuthRows = ref([])
+const roleCatalog = ref([])
 
 const filterForm = reactive({
   keyword: '',
-  role: ''
+  roleId: null
+})
+const pagination = reactive({
+  pageNum: 1,
+  pageSize: 10,
+  total: 0
 })
 
 const editorVisible = ref(false)
 const editForm = reactive({
-  id: '',
+  id: null,
+  displayId: '',
   name: '',
-  role: '',
+  roleId: null,
   permissions: []
 })
 const creatorVisible = ref(false)
 const createForm = reactive({
-  name: '',
-  role: '',
+  username: '',
+  realName: '',
+  phone: '',
+  email: '',
+  password: '',
+  roleId: null,
   permissions: [],
-  status: '启用'
+  status: 1
 })
+
+const roleOptions = computed(() => roleCatalog.value)
+const permissionOptions = computed(() =>
+  [...new Set(roleCatalog.value.flatMap((item) => item.permissionNames || []))].filter(Boolean)
+)
 
 const summaryCards = computed(() => {
   const total = userAuthRows.value.length
@@ -74,83 +56,132 @@ const summaryCards = computed(() => {
   const teacherCount = userAuthRows.value.filter((item) => item.role === '教师').length
   const studentCount = userAuthRows.value.filter((item) => item.role === '学生').length
   return [
-    { label: '授权用户数', value: `${total}`, icon: UserFilled },
-    { label: '管理员角色', value: `${adminCount}`, icon: Key },
-    { label: '教师角色', value: `${teacherCount}`, icon: Key },
-    { label: '学生角色', value: `${studentCount}`, icon: Key }
+    { label: '当前页授权用户', value: `${total}`, tip: `总计 ${pagination.total}`, icon: UserFilled },
+    { label: '当前页管理员角色', value: `${adminCount}`, tip: '基于当前页列表', icon: Key },
+    { label: '当前页教师角色', value: `${teacherCount}`, tip: '基于当前页列表', icon: Key },
+    { label: '当前页学生角色', value: `${studentCount}`, tip: '基于当前页列表', icon: Key }
   ]
 })
 
-const filteredRows = computed(() =>
-  userAuthRows.value.filter((item) => {
-    const hitKeyword = filterForm.keyword
-      ? item.name.includes(filterForm.keyword) || item.id.includes(filterForm.keyword)
-      : true
-    const hitRole = filterForm.role ? item.role === filterForm.role : true
-    return hitKeyword && hitRole
-  })
-)
+const filteredRows = computed(() => userAuthRows.value)
 
 function statusTagType(status) {
   return status === '启用' ? 'success' : 'info'
 }
 
+function getRoleById(roleId) {
+  return roleCatalog.value.find((item) => item.id === roleId) || null
+}
+
+function syncPermissions(roleId, targetForm) {
+  targetForm.permissions = getRoleById(roleId)?.permissionNames?.slice() || []
+}
+
+async function loadAuthorizationPage() {
+  loading.value = true
+  try {
+    const pageData = await fetchAdminUserAuthorizationPage({
+      pageNum: pagination.pageNum,
+      pageSize: pagination.pageSize,
+      keyword: filterForm.keyword.trim(),
+      roleId: filterForm.roleId || undefined
+    })
+    userAuthRows.value = pageData.list
+    roleCatalog.value = pageData.roles
+    pagination.total = pageData.total
+  } catch (error) {
+    ElMessage.error(error.message || '授权列表加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleSearch() {
+  pagination.pageNum = 1
+  loadAuthorizationPage()
+}
+
+function handleCurrentChange(pageNum) {
+  pagination.pageNum = pageNum
+  loadAuthorizationPage()
+}
+
+function handleSizeChange(pageSize) {
+  pagination.pageSize = pageSize
+  pagination.pageNum = 1
+  loadAuthorizationPage()
+}
+
 function openEditor(row) {
   editForm.id = row.id
+  editForm.displayId = row.displayId
   editForm.name = row.name
-  editForm.role = row.role
+  editForm.roleId = row.roleId
   editForm.permissions = [...row.permissions]
   editorVisible.value = true
 }
 
-function saveAuthorization() {
-  const target = userAuthRows.value.find((item) => item.id === editForm.id)
-  if (!target) return
-  target.role = editForm.role
-  target.permissions = [...editForm.permissions]
-  target.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' ')
-  editorVisible.value = false
+async function saveAuthorization() {
+  if (!editForm.roleId) return
+
+  saveLoading.value = true
+  try {
+    await assignAdminUserRoles(editForm.id, [editForm.roleId])
+    ElMessage.success('角色授权已更新')
+    editorVisible.value = false
+    await loadAuthorizationPage()
+  } catch (error) {
+    ElMessage.error(error.message || '角色授权更新失败')
+  } finally {
+    saveLoading.value = false
+  }
 }
 
 function openCreator() {
-  createForm.name = ''
-  createForm.role = ''
+  createForm.username = ''
+  createForm.realName = ''
+  createForm.phone = ''
+  createForm.email = ''
+  createForm.password = ''
+  createForm.roleId = null
   createForm.permissions = []
-  createForm.status = '启用'
+  createForm.status = 1
   creatorVisible.value = true
 }
 
-function generateUserId() {
-  const maxNumber = userAuthRows.value.reduce((max, item) => {
-    const value = Number(item.id.replace('U-', ''))
-    return Number.isNaN(value) ? max : Math.max(max, value)
-  }, 10000)
-  return `U-${maxNumber + 1}`
-}
+async function saveNewUser() {
+  if (!createForm.username.trim() || !createForm.realName.trim() || !createForm.roleId) return
 
-function getNowString() {
-  return new Date().toISOString().slice(0, 19).replace('T', ' ')
-}
-
-function saveNewUser() {
-  if (!createForm.name || !createForm.role || createForm.permissions.length === 0) return
-  const now = getNowString()
-  userAuthRows.value.unshift({
-    id: generateUserId(),
-    name: createForm.name,
-    role: createForm.role,
-    permissions: [...createForm.permissions],
-    status: createForm.status,
-    created_at: now,
-    updated_at: now
-  })
-  creatorVisible.value = false
+  createLoading.value = true
+  try {
+    await createAuthorizedAdminUser({
+      username: createForm.username.trim(),
+      realName: createForm.realName.trim(),
+      phone: createForm.phone.trim(),
+      email: createForm.email.trim(),
+      password: createForm.password.trim(),
+      status: createForm.status,
+      roleId: createForm.roleId
+    })
+    ElMessage.success('授权用户已创建')
+    creatorVisible.value = false
+    await handleSearch()
+  } catch (error) {
+    ElMessage.error(error.message || '授权用户创建失败')
+  } finally {
+    createLoading.value = false
+  }
 }
 
 function resetFilter() {
   filterForm.keyword = ''
-  filterForm.role = ''
+  filterForm.roleId = null
+  handleSearch()
 }
+
+onMounted(() => {
+  loadAuthorizationPage()
+})
 </script>
 
 <template>
@@ -164,6 +195,7 @@ function resetFilter() {
               <el-icon class="summary-icon"><component :is="card.icon" /></el-icon>
             </div>
             <div class="summary-value">{{ card.value }}</div>
+            <div class="summary-tip">{{ card.tip }}</div>
           </el-card>
         </el-col>
       </el-row>
@@ -172,25 +204,34 @@ function resetFilter() {
         <div class="filter-wrap">
           <el-input
             v-model="filterForm.keyword"
-            placeholder="搜索用户ID/姓名"
+            placeholder="搜索用户名/姓名/手机号"
             clearable
             style="max-width: 260px"
+            @keyup.enter="handleSearch"
+            @clear="handleSearch"
           />
-          <el-select v-model="filterForm.role" placeholder="全部角色" clearable style="width: 160px">
-            <el-option v-for="role in roleOptions" :key="role" :label="role" :value="role" />
+          <el-select v-model="filterForm.roleId" placeholder="全部角色" clearable style="width: 160px">
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.id"
+              :label="role.roleName"
+              :value="role.id"
+            />
           </el-select>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button type="primary" @click="openCreator">添加用户</el-button>
           <el-button @click="resetFilter">重置</el-button>
         </div>
 
-        <el-table :data="filteredRows" stripe>
-          <el-table-column prop="id" label="用户ID" width="120" />
+        <el-table v-loading="loading" :data="filteredRows" stripe>
+          <el-table-column prop="displayId" label="用户ID" width="120" />
           <el-table-column prop="name" label="姓名" min-width="110" />
           <el-table-column label="角色" width="110">
             <template #default="{ row }">
               <el-tag>{{ row.role }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="username" label="用户名" min-width="140" />
           <el-table-column label="权限清单" min-width="260">
             <template #default="{ row }">
               <div class="permissions-cell">
@@ -205,32 +246,49 @@ function resetFilter() {
               <el-tag :type="statusTagType(row.status)" effect="light">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="created_at" label="created_at" min-width="170" />
-          <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+          <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+          <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
           <el-table-column label="操作" width="110" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEditor(row)">修改授权</el-button>
             </template>
           </el-table-column>
         </el-table>
+        <div class="pagination-wrap">
+          <el-pagination
+            background
+            layout="total, sizes, prev, pager, next"
+            :current-page="pagination.pageNum"
+            :page-size="pagination.pageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="pagination.total"
+            @current-change="handleCurrentChange"
+            @size-change="handleSizeChange"
+          />
+        </div>
       </el-card>
 
       <el-drawer v-model="editorVisible" title="角色与权限调整" size="460px" append-to-body>
         <el-form label-width="90px" class="editor-form">
           <el-form-item label="用户ID">
-            <el-input v-model="editForm.id" disabled />
+            <el-input v-model="editForm.displayId" disabled />
           </el-form-item>
           <el-form-item label="姓名">
             <el-input v-model="editForm.name" disabled />
           </el-form-item>
           <el-form-item label="角色">
-            <el-select v-model="editForm.role" style="width: 100%">
-              <el-option v-for="role in roleOptions" :key="role" :label="role" :value="role" />
+            <el-select v-model="editForm.roleId" style="width: 100%" @change="(value) => syncPermissions(value, editForm)">
+              <el-option
+                v-for="role in roleOptions"
+                :key="role.id"
+                :label="role.roleName"
+                :value="role.id"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="权限">
             <el-checkbox-group v-model="editForm.permissions" class="perm-group">
-              <el-checkbox v-for="perm in permissionOptions" :key="perm" :label="perm">
+              <el-checkbox v-for="perm in permissionOptions" :key="perm" :label="perm" disabled>
                 {{ perm }}
               </el-checkbox>
             </el-checkbox-group>
@@ -239,30 +297,47 @@ function resetFilter() {
         <template #footer>
           <div class="drawer-footer">
             <el-button @click="editorVisible = false">取消</el-button>
-            <el-button type="primary" @click="saveAuthorization">保存</el-button>
+            <el-button type="primary" :loading="saveLoading" @click="saveAuthorization">保存</el-button>
           </div>
         </template>
       </el-drawer>
 
       <el-drawer v-model="creatorVisible" title="添加授权用户" size="460px" append-to-body>
         <el-form label-width="90px" class="editor-form">
+          <el-form-item label="用户名">
+            <el-input v-model="createForm.username" placeholder="请输入用户名" />
+          </el-form-item>
           <el-form-item label="姓名">
-            <el-input v-model="createForm.name" placeholder="请输入姓名" />
+            <el-input v-model="createForm.realName" placeholder="请输入姓名" />
+          </el-form-item>
+          <el-form-item label="初始密码">
+            <el-input v-model="createForm.password" placeholder="留空则使用默认密码" show-password />
+          </el-form-item>
+          <el-form-item label="手机号">
+            <el-input v-model="createForm.phone" placeholder="请输入手机号" />
+          </el-form-item>
+          <el-form-item label="邮箱">
+            <el-input v-model="createForm.email" placeholder="请输入邮箱" />
           </el-form-item>
           <el-form-item label="角色">
-            <el-select v-model="createForm.role" style="width: 100%" placeholder="请选择角色">
-              <el-option v-for="role in roleOptions" :key="role" :label="role" :value="role" />
+            <el-select v-model="createForm.roleId" style="width: 100%" placeholder="请选择角色" @change="(value) => syncPermissions(value, createForm)">
+              <el-option
+                v-for="role in roleOptions"
+                :key="role.id"
+                :label="role.roleName"
+                :value="role.id"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="状态">
-            <el-select v-model="createForm.status" style="width: 100%">
-              <el-option label="启用" value="启用" />
-              <el-option label="停用" value="停用" />
-            </el-select>
+            <el-radio-group v-model="createForm.status">
+              <el-radio :value="1">启用</el-radio>
+              <el-radio :value="0">停用</el-radio>
+            </el-radio-group>
           </el-form-item>
           <el-form-item label="权限">
             <el-checkbox-group v-model="createForm.permissions" class="perm-group">
-              <el-checkbox v-for="perm in permissionOptions" :key="perm" :label="perm">
+              <el-checkbox v-for="perm in permissionOptions" :key="perm" :label="perm" disabled>
                 {{ perm }}
               </el-checkbox>
             </el-checkbox-group>
@@ -273,7 +348,8 @@ function resetFilter() {
             <el-button @click="creatorVisible = false">取消</el-button>
             <el-button
               type="primary"
-              :disabled="!createForm.name || !createForm.role || createForm.permissions.length === 0"
+              :loading="createLoading"
+              :disabled="!createForm.username.trim() || !createForm.realName.trim() || !createForm.roleId"
               @click="saveNewUser"
             >
               添加
@@ -319,6 +395,12 @@ function resetFilter() {
   font-weight: 700;
 }
 
+.summary-tip {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
 .filter-wrap {
   margin-bottom: 12px;
   display: flex;
@@ -348,9 +430,20 @@ function resetFilter() {
   gap: 8px;
 }
 
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
 @media (max-width: 768px) {
   .perm-group {
     grid-template-columns: 1fr;
+  }
+
+  .pagination-wrap {
+    justify-content: center;
+    overflow-x: auto;
   }
 }
 </style>

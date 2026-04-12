@@ -2,10 +2,10 @@ package com.edusmart.manager.controller.admin;
 
 import com.edusmart.manager.common.PageData;
 import com.edusmart.manager.common.Result;
+import com.edusmart.manager.dto.admin.AdminUserPageItemDTO;
 import com.edusmart.manager.dto.admin.AdminUserPageQueryDTO;
 import com.edusmart.manager.dto.admin.AdminUserSaveDTO;
 import com.edusmart.manager.dto.admin.UserRoleAssignDTO;
-import com.edusmart.manager.entity.EduUserEntity;
 import com.edusmart.manager.service.admin.AdminUserService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,33 +23,39 @@ public class AdminUserController {
         this.adminUserService = adminUserService;
     }
 
+    @PreAuthorize("hasAnyAuthority('user:view', 'user:manage', 'user:authorization:manage')")
     @PostMapping("/page")
-    public Result<PageData<EduUserEntity>> page(@RequestBody AdminUserPageQueryDTO queryDTO) {
+    public Result<PageData<AdminUserPageItemDTO>> page(@RequestBody AdminUserPageQueryDTO queryDTO) {
         return Result.success(adminUserService.page(queryDTO));
     }
 
+    @PreAuthorize("hasAnyAuthority('user:view', 'user:manage', 'user:authorization:manage')")
     @GetMapping("/{id}")
-    public Result<EduUserEntity> detail(@PathVariable Long id) {
+    public Result<AdminUserPageItemDTO> detail(@PathVariable Long id) {
         return Result.success(adminUserService.getById(id));
     }
 
+    @PreAuthorize("hasAnyAuthority('user:manage', 'user:authorization:manage')")
     @PostMapping
     public Result<Long> create(@Valid @RequestBody AdminUserSaveDTO dto) {
         return Result.success(adminUserService.create(dto));
     }
 
+    @PreAuthorize("hasAuthority('user:manage')")
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @Valid @RequestBody AdminUserSaveDTO dto) {
         adminUserService.update(id, dto);
         return Result.success(null);
     }
 
+    @PreAuthorize("hasAuthority('user:manage')")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         adminUserService.delete(id);
         return Result.success(null);
     }
 
+    @PreAuthorize("hasAuthority('user:authorization:manage')")
     @PutMapping("/{id}/roles")
     public Result<Void> assignRoles(@PathVariable Long id, @Valid @RequestBody UserRoleAssignDTO dto) {
         adminUserService.assignRoles(id, dto.getRoleIds());

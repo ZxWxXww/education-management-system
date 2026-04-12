@@ -1,0 +1,162 @@
+# Codex MCP 配置模板
+# 教培智管系统模型上下文协议配置
+
+# MCP 服务器配置
+mcp:
+  servers:
+    # Git 集成服务器
+    git-server:
+      enabled: true
+      command: "npx"
+      args: ["@modelcontextprotocol/server-git"]
+      env:
+        GIT_AUTHOR_NAME: "EduSmart System"
+        GIT_AUTHOR_EMAIL: "system@edusmart.com"
+    
+    # MySQL 数据库服务器
+    mysql-server:
+      enabled: true
+      command: "npx"
+      args: ["@modelcontextprotocol/server-mysql"]
+      env:
+        MYSQL_HOST: "localhost"
+        MYSQL_PORT: "3306"
+        MYSQL_DATABASE: "edusmart_manager"
+        MYSQL_USER: "YOUR_MYSQL_USER"
+        MYSQL_PASSWORD: "YOUR_MYSQL_PASSWORD"
+    
+    # 文件系统服务器
+    filesystem-server:
+      enabled: true
+      command: "npx"
+      args: ["@modelcontextprotocol/server-filesystem", "d:/education"]
+    
+    # Web 搜索服务器（可选）
+    web-search-server:
+      enabled: false
+      command: "npx"
+      args: ["@modelcontextprotocol/server-web-search"]
+      env:
+        SERPER_API_KEY: "YOUR_SERPER_API_KEY"  # 需要申请
+
+# 技能配置
+skills:
+  # 教培系统专用技能
+  education:
+    - name: "course-management"
+      description: "课程管理技能"
+      enabled: true
+      
+    - name: "student-analysis"
+      description: "学生数据分析技能"
+      enabled: true
+      
+    - name: "attendance-tracker"
+      description: "考勤追踪技能"
+      enabled: true
+      
+    - name: "grade-analyzer"
+      description: "成绩分析技能"
+      enabled: true
+      
+    - name: "financial-reports"
+      description: "财务报表生成技能"
+      enabled: true
+
+  # 开发辅助技能
+  development:
+    - name: "code-generator"
+      description: "代码生成器"
+      enabled: true
+      
+    - name: "api-tester"
+      description: "API测试工具"
+      enabled: true
+      
+    - name: "database-manager"
+      description: "数据库管理工具"
+      enabled: true
+
+# 上下文配置
+context:
+  # 项目上下文
+  project:
+    name: "教培智管系统"
+    version: "1.0.0"
+    type: "education_management"
+    
+  # 技术栈上下文
+  tech_stack:
+    frontend: "Vue 3 + Element Plus"
+    backend: "Spring Boot 3 + MyBatis-Plus"
+    database: "MySQL 8"
+    authentication: "JWT + Spring Security"
+    
+  # 角色权限上下文
+  roles:
+    - name: "admin"
+      description: "管理员"
+      permissions: ["all"]
+      
+    - name: "teacher"
+      description: "教师"
+      permissions: ["course", "assignment", "grade", "attendance"]
+      
+    - name: "student"
+      description: "学生"
+      permissions: ["course_view", "assignment_submit", "grade_view", "attendance_view"]
+
+# 安全配置
+security:
+  # JWT 配置
+  jwt:
+    secret: "YOUR_JWT_SECRET_KEY_HERE"
+    expiration: 86400000  # 24小时
+    
+  # API 安全配置
+  api:
+    rate_limit: 1000  # 每小时请求限制
+    cors_enabled: true
+    
+  # 数据库安全
+  database:
+    encrypt_connection: true
+    connection_timeout: 30000
+
+# 监控配置
+monitoring:
+  # 日志配置
+  logging:
+    level: "INFO"
+    file: "logs/edusmart.log"
+    max_size: "100MB"
+    
+  # 性能监控
+  performance:
+    enabled: true
+    metrics_endpoint: "/actuator/metrics"
+    
+  # 错误追踪
+  error_tracking:
+    enabled: true
+    endpoint: "/actuator/errors"
+
+# 扩展配置
+extensions:
+  # AI 功能扩展（可选）
+  ai:
+    enabled: false
+    provider: "openai"  # 或 "anthropic"
+    api_key: "YOUR_AI_API_KEY"
+    
+  # 消息推送扩展
+  messaging:
+    enabled: false
+    provider: "websocket"  # 或 "sse"
+    
+  # 文件存储扩展
+  file_storage:
+    enabled: true
+    provider: "local"  # 或 "oss", "s3"
+    max_file_size: "10MB"
+    allowed_types: ["image/*", "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]

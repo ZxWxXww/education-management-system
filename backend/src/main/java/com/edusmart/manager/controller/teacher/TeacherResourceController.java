@@ -3,8 +3,8 @@ package com.edusmart.manager.controller.teacher;
 import com.edusmart.manager.common.PageData;
 import com.edusmart.manager.common.Result;
 import com.edusmart.manager.dto.teacher.TeacherResourcePageQueryDTO;
+import com.edusmart.manager.dto.teacher.TeacherResourcePageItemDTO;
 import com.edusmart.manager.dto.teacher.TeacherResourceSaveDTO;
-import com.edusmart.manager.entity.EduTeachingResourceEntity;
 import com.edusmart.manager.service.teacher.TeacherResourceService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -12,15 +12,15 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/teacher/resources")
-@PreAuthorize("hasRole('TEACHER')")
+@PreAuthorize("hasRole('TEACHER') and hasAuthority('resource:view')")
 public class TeacherResourceController {
     private final TeacherResourceService resourceService;
     public TeacherResourceController(TeacherResourceService resourceService) { this.resourceService = resourceService; }
 
     @PostMapping("/page")
-    public Result<PageData<EduTeachingResourceEntity>> page(@RequestBody TeacherResourcePageQueryDTO queryDTO) { return Result.success(resourceService.page(queryDTO)); }
+    public Result<PageData<TeacherResourcePageItemDTO>> page(@RequestBody TeacherResourcePageQueryDTO queryDTO) { return Result.success(resourceService.page(queryDTO)); }
     @GetMapping("/{id}")
-    public Result<EduTeachingResourceEntity> detail(@PathVariable Long id) { return Result.success(resourceService.getById(id)); }
+    public Result<TeacherResourcePageItemDTO> detail(@PathVariable Long id) { return Result.success(resourceService.getById(id)); }
     @PostMapping
     public Result<Long> create(@Valid @RequestBody TeacherResourceSaveDTO dto) { return Result.success(resourceService.create(dto)); }
     @PutMapping("/{id}")

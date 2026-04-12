@@ -1,23 +1,19 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Document, EditPen, Reading } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { fetchAdminTeachingResourceOverview } from '../../api/admin/resource'
 
 const router = useRouter()
-
-// 教学资源页面 mock 数据（后续可替换为 src/api/admin/resource.js）
+const loading = ref(false)
 const resourceOverview = ref({
-  totalAssignments: 128,
-  publishedThisWeek: 23,
-  gradeRecords: 2460,
-  avgScore: 84
+  totalAssignments: 0,
+  publishedThisWeek: 0,
+  gradeRecords: 0,
+  avgScore: 0
 })
-
-const recentActivities = ref([
-  { type: '作业', title: '函数综合训练（第一章）已发布', time: '10分钟前' },
-  { type: '成绩', title: '高二英语提升班成绩批改完成', time: '32分钟前' },
-  { type: '作业', title: 'Vue 组件通信练习截止提醒已发送', time: '1小时前' }
-])
+const recentActivities = ref([])
 
 const cards = computed(() => [
   { label: '作业总数', value: resourceOverview.value.totalAssignments, tip: '累计发布' },
@@ -33,10 +29,27 @@ function goAssignment() {
 function goGrade() {
   router.push('/admin/resources/grades')
 }
+
+async function loadOverview() {
+  loading.value = true
+  try {
+    const data = await fetchAdminTeachingResourceOverview()
+    resourceOverview.value = data
+    recentActivities.value = data.recentActivities
+  } catch (error) {
+    ElMessage.error(error.message || '教学资源总览加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadOverview()
+})
 </script>
 
 <template>
-  <div class="teaching-resources">
+  <div v-loading="loading" class="teaching-resources">
     <section class="head">
       <h1 class="title">教学资源</h1>
       <p class="subtitle">统一管理作业与成绩数据，支持快速发布与追踪</p>

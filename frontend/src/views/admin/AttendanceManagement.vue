@@ -1,68 +1,85 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { fetchAdminAttendanceOverview } from '../../api/admin/attendance'
 
-// 考勤管理页 mock 数据（后续接入真实接口时，可替换为 src/api/attendance 下的方法）
-const kpiCards = [
-  { label: '本周总考勤人次', value: '4,268', trend: '+6.8%', tone: 'blue' },
-  { label: '准时到课率', value: '96.4%', trend: '+1.2%', tone: 'green' },
-  { label: '请假申请数', value: '83', trend: '-4.1%', tone: 'orange' },
-  { label: '异常考勤数', value: '52', trend: '+2.6%', tone: 'red' }
-]
+const router = useRouter()
+const loading = ref(false)
+const overview = ref({
+  totalAttendanceCount: 0,
+  punctualRate: 0,
+  leaveCount: 0,
+  exceptionCount: 0,
+  trend: [],
+  classOverview: [],
+  focusAlerts: []
+})
 
-const attendanceTrend = [92, 94, 95, 93, 96, 97, 96]
-const trendLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const kpiCards = computed(() => [
+  { label: '本周总考勤人次', value: overview.value.totalAttendanceCount.toLocaleString(), trend: `${overview.value.trend.length} 天`, tone: 'blue' },
+  { label: '准时到课率', value: `${overview.value.punctualRate}%`, trend: '近 7 日', tone: 'green' },
+  { label: '请假申请数', value: `${overview.value.leaveCount}`, trend: '近 7 日', tone: 'orange' },
+  { label: '异常考勤数', value: `${overview.value.exceptionCount}`, trend: '近 7 日', tone: 'red' }
+])
 
-const classRows = [
-  { className: '高一数学 A1 班', teacher: '陈老师', shouldAttend: 42, actualAttend: 41, normalRate: 97.6, abnormal: 1 },
-  { className: '高二英语 B3 班', teacher: '李老师', shouldAttend: 38, actualAttend: 36, normalRate: 94.7, abnormal: 2 },
-  { className: '初三物理冲刺班', teacher: '王老师', shouldAttend: 35, actualAttend: 34, normalRate: 97.1, abnormal: 1 },
-  { className: '高三化学提升班', teacher: '赵老师', shouldAttend: 30, actualAttend: 28, normalRate: 93.3, abnormal: 2 }
-]
-
-const focusAlerts = [
-  { level: '高', text: '高二英语 B3 班连续两日到课率低于 95%' },
-  { level: '中', text: '初三物理冲刺班出现 1 次迟到高峰时段（08:20）' },
-  { level: '低', text: '请假审批平均时长较上周增加 6 分钟' }
-]
-
-const selectedCampus = ref('全部校区')
-const campusOptions = ['全部校区', '东城校区', '南山校区', '北辰校区']
+const trendLabels = computed(() => overview.value.trend.map((item) => item.label))
+const classRows = computed(() => overview.value.classOverview)
+const focusAlerts = computed(() => overview.value.focusAlerts)
 
 const trendPath = computed(() => {
+  const points = overview.value.trend.map((item) => item.punctualRate)
+  if (!points.length) return ''
   const width = 560
   const height = 180
-  const max = Math.max(...attendanceTrend)
-  const min = Math.min(...attendanceTrend)
+  const max = Math.max(...points)
+  const min = Math.min(...points)
   const span = max - min || 1
 
-  return attendanceTrend
+  return points
     .map((value, index) => {
-      const x = (index / (attendanceTrend.length - 1)) * width
+      const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width
       const y = height - ((value - min) / span) * (height - 30) - 12
       return `${x.toFixed(2)},${y.toFixed(2)}`
     })
     .join(' ')
 })
 
+async function loadOverview() {
+  loading.value = true
+  try {
+    overview.value = await fetchAdminAttendanceOverview()
+  } catch (error) {
+    ElMessage.error('管理员考勤总览加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+function viewAbnormal() {
+  router.push('/admin/attendance/abnormal')
+}
+
 function getRateType(rate) {
   if (rate >= 97) return 'success'
   if (rate >= 95) return 'warning'
   return 'danger'
 }
+
+onMounted(() => {
+  loadOverview()
+})
 </script>
 
 <template>
-  <div class="attendance-page">
+  <div v-loading="loading" class="attendance-page">
     <section class="attendance-head">
       <div>
         <h1 class="attendance-title">考勤管理</h1>
         <p class="attendance-subtitle">管理员端 / 考勤管理</p>
       </div>
       <div class="attendance-actions">
-        <el-select v-model="selectedCampus" class="campus-select" size="large">
-          <el-option v-for="option in campusOptions" :key="option" :label="option" :value="option" />
-        </el-select>
-        <el-button type="primary" size="large">导出日报</el-button>
+        <el-tag type="info" effect="plain">当前仅支持全校区真实总览</el-tag>
       </div>
     </section>
 
@@ -90,8 +107,8 @@ function getRateType(rate) {
                 <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0" />
               </linearGradient>
             </defs>
-            <polygon :points="`0,205 ${trendPath} 560,205`" fill="url(#attendanceLineFill)" />
-            <polyline :points="trendPath" fill="none" stroke="#1d4ed8" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+            <polygon v-if="trendPath" :points="`0,205 ${trendPath} 560,205`" fill="url(#attendanceLineFill)" />
+            <polyline v-if="trendPath" :points="trendPath" fill="none" stroke="#1d4ed8" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
           </svg>
           <div class="chart-axis">
             <span v-for="label in trendLabels" :key="label">{{ label }}</span>
@@ -120,7 +137,7 @@ function getRateType(rate) {
       </header>
       <el-table :data="classRows" stripe>
         <el-table-column prop="className" label="班级名称" min-width="180" />
-        <el-table-column prop="teacher" label="任课教师" width="120" />
+        <el-table-column prop="teacherName" label="任课教师" width="120" />
         <el-table-column prop="shouldAttend" label="应到" width="100" />
         <el-table-column prop="actualAttend" label="实到" width="100" />
         <el-table-column label="到课率" width="120">
@@ -128,10 +145,10 @@ function getRateType(rate) {
             <el-tag :type="getRateType(row.normalRate)" effect="light">{{ row.normalRate }}%</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="abnormal" label="异常人数" width="110" />
+        <el-table-column prop="abnormalCount" label="异常人数" width="110" />
         <el-table-column label="操作" width="140" fixed="right">
-          <template #default>
-            <el-button link type="primary">查看明细</el-button>
+          <template #default="{ row }">
+            <el-button link type="primary" @click="viewAbnormal(row)">查看明细</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -172,10 +189,6 @@ function getRateType(rate) {
 .attendance-actions {
   display: flex;
   gap: 12px;
-}
-
-.campus-select {
-  width: 150px;
 }
 
 .kpi-grid {
@@ -333,9 +346,8 @@ function getRateType(rate) {
     width: 100%;
   }
 
-  .campus-select,
-  .attendance-actions :deep(.el-button) {
-    flex: 1;
+  .attendance-actions :deep(.el-tag) {
+    align-self: flex-start;
   }
 
   .kpi-grid {

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "nav:check": "node scripts/check-nav-freeze.mjs",
+    "test:contracts": "node --test tests/stage4-real-api-contract.test.mjs tests/stage5-finance-enum.test.mjs tests/stage6-auth-guard.test.mjs tests/stage7-api-contract.test.mjs",
     "build": "vite build",
+    "verify": "npm run test:contracts && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {

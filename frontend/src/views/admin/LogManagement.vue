@@ -1,89 +1,124 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  exportAdminLogs,
+  fetchAdminLogArchiveStrategy,
+  fetchAdminLogPage,
+  updateAdminLogArchiveStrategy
+} from '../../api/admin/log'
 
-// 日志管理 mock 数据（后续接入真实接口时，可替换为 src/api/admin/log.js）
+const loading = ref(false)
+const exportLoading = ref(false)
+const archiveDialogVisible = ref(false)
+const archiveLoading = ref(false)
+const archiveSaving = ref(false)
 const queryForm = ref({
   keyword: '',
   module: '全部模块',
   level: '全部等级',
-  dateRange: ['2026-04-01', '2026-04-10']
+  dateRange: []
+})
+const logRows = ref([])
+const archiveForm = ref({
+  autoArchiveEnabled: true,
+  retentionDays: 180,
+  updatedAt: '-'
 })
 
-const moduleOptions = ['全部模块', '用户中心', '课程管理', '教学资源', '考勤管理', '财务统计', '机构设置']
-const levelOptions = ['全部等级', 'INFO', 'WARN', 'ERROR']
-
-const logRows = ref([
-  {
-    id: 'LOG-20260410-0001',
-    operator: 'admin',
-    module: '机构设置',
-    action: '更新站点标题与 Logo',
-    ip: '10.10.3.15',
-    level: 'INFO',
-    created_at: '2026-04-10 09:18:24',
-    updated_at: '2026-04-10 09:18:24'
-  },
-  {
-    id: 'LOG-20260410-0002',
-    operator: 'finance_admin',
-    module: '财务统计',
-    action: '导出财单明细（4月）',
-    ip: '10.10.8.21',
-    level: 'WARN',
-    created_at: '2026-04-10 10:06:41',
-    updated_at: '2026-04-10 10:06:41'
-  },
-  {
-    id: 'LOG-20260410-0003',
-    operator: 'teacher_zhang',
-    module: '教学资源',
-    action: '批量上传作业附件',
-    ip: '10.10.2.71',
-    level: 'ERROR',
-    created_at: '2026-04-10 10:42:13',
-    updated_at: '2026-04-10 10:42:13'
-  },
-  {
-    id: 'LOG-20260410-0004',
-    operator: 'ops_admin',
-    module: '机构设置',
-    action: '切换首页展示模板',
-    ip: '10.10.1.9',
-    level: 'INFO',
-    created_at: '2026-04-10 11:17:59',
-    updated_at: '2026-04-10 11:17:59'
-  }
+const moduleOptions = computed(() => [
+  '全部模块',
+  ...new Set(logRows.value.map((row) => row.module).filter(Boolean))
 ])
+const levelOptions = ['全部等级', 'INFO', 'ERROR']
 
 const statsCards = computed(() => {
   const total = logRows.value.length
-  const err = logRows.value.filter((row) => row.level === 'ERROR').length
-  const warn = logRows.value.filter((row) => row.level === 'WARN').length
+  const infoCount = logRows.value.filter((row) => row.level === 'INFO').length
+  const errorCount = logRows.value.filter((row) => row.level === 'ERROR').length
+  const moduleCount = new Set(logRows.value.map((row) => row.module).filter(Boolean)).size
   return [
-    { label: '日志总数', value: `${total}`, tip: '最近 10 天' },
-    { label: '告警日志', value: `${warn}`, tip: 'WARN' },
-    { label: '异常日志', value: `${err}`, tip: 'ERROR' },
-    { label: '模块覆盖', value: '7', tip: '核心模块' }
+    { label: '日志总数', value: `${total}`, tip: '当前结果' },
+    { label: '成功日志', value: `${infoCount}`, tip: 'INFO' },
+    { label: '异常日志', value: `${errorCount}`, tip: 'ERROR' },
+    { label: '模块覆盖', value: `${moduleCount}`, tip: '当前页' }
   ]
 })
 
-const filteredRows = computed(() =>
-  logRows.value.filter((row) => {
-    const keyword = queryForm.value.keyword.trim()
-    const hitKeyword =
-      !keyword || row.id.includes(keyword) || row.operator.includes(keyword) || row.action.includes(keyword) || row.ip.includes(keyword)
-    const hitModule = queryForm.value.module === '全部模块' || row.module === queryForm.value.module
-    const hitLevel = queryForm.value.level === '全部等级' || row.level === queryForm.value.level
-    return hitKeyword && hitModule && hitLevel
-  })
-)
+async function loadLogs() {
+  loading.value = true
+  try {
+    const page = await fetchAdminLogPage({
+      pageNum: 1,
+      pageSize: 200,
+      ...queryForm.value
+    })
+    logRows.value = page.list
+  } catch (error) {
+    ElMessage.error(error.message || '日志列表加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadArchiveStrategy() {
+  archiveLoading.value = true
+  try {
+    archiveForm.value = await fetchAdminLogArchiveStrategy()
+  } catch (error) {
+    ElMessage.error(error.message || '归档策略加载失败')
+  } finally {
+    archiveLoading.value = false
+  }
+}
+
+function handleQuery() {
+  loadLogs()
+}
 
 function resetQuery() {
   queryForm.value = {
     keyword: '',
     module: '全部模块',
     level: '全部等级',
-    dateRange: ['2026-04-01', '2026-04-10']
+    dateRange: []
+  }
+  loadLogs()
+}
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    await exportAdminLogs(queryForm.value)
+    ElMessage.success('日志导出成功')
+  } catch (error) {
+    ElMessage.error(error.message || '日志导出失败')
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+function handleArchive() {
+  archiveDialogVisible.value = true
+  if (archiveForm.value.updatedAt === '-') {
+    loadArchiveStrategy()
+  }
+}
+
+async function handleSaveArchive() {
+  archiveSaving.value = true
+  try {
+    await updateAdminLogArchiveStrategy({
+      autoArchiveEnabled: archiveForm.value.autoArchiveEnabled,
+      retentionDays: archiveForm.value.retentionDays
+    })
+    ElMessage.success('归档策略已保存')
+    await loadArchiveStrategy()
+    archiveDialogVisible.value = false
+  } catch (error) {
+    ElMessage.error(error.message || '归档策略保存失败')
+  } finally {
+    archiveSaving.value = false
   }
 }
 
@@ -92,6 +127,11 @@ function tagType(level) {
   if (level === 'WARN') return 'warning'
   return 'success'
 }
+
+onMounted(() => {
+  loadLogs()
+  loadArchiveStrategy()
+})
 </script>
 
 <template>
@@ -102,8 +142,8 @@ function tagType(level) {
         <p class="subtitle">机构设置 / 日志管理</p>
       </div>
       <div class="actions">
-        <el-button>导出日志</el-button>
-        <el-button type="primary">归档策略</el-button>
+        <el-button :loading="exportLoading" @click="handleExport">导出日志</el-button>
+        <el-button type="primary" @click="handleArchive">归档策略</el-button>
       </div>
     </section>
 
@@ -124,12 +164,12 @@ function tagType(level) {
         <el-option v-for="option in levelOptions" :key="option" :label="option" :value="option" />
       </el-select>
       <el-date-picker v-model="queryForm.dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
-      <el-button type="primary">查询</el-button>
+      <el-button type="primary" @click="handleQuery">查询</el-button>
       <el-button @click="resetQuery">重置</el-button>
     </section>
 
     <section class="panel">
-      <el-table :data="filteredRows" stripe>
+      <el-table v-loading="loading" :data="logRows" stripe>
         <el-table-column prop="id" label="日志ID" min-width="180" />
         <el-table-column prop="operator" label="操作人" width="130" />
         <el-table-column prop="module" label="模块" width="120" />
@@ -140,10 +180,28 @@ function tagType(level) {
             <el-tag :type="tagType(row.level)" effect="light">{{ row.level }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="created_at" min-width="170" />
-        <el-table-column prop="updated_at" label="updated_at" min-width="170" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
       </el-table>
     </section>
+
+    <el-dialog v-model="archiveDialogVisible" title="归档策略" width="420px">
+      <div v-loading="archiveLoading" class="archive-body">
+        <el-form :model="archiveForm" label-width="110px">
+          <el-form-item label="自动归档">
+            <el-switch v-model="archiveForm.autoArchiveEnabled" active-text="开启" inactive-text="关闭" />
+          </el-form-item>
+          <el-form-item label="保留天数">
+            <el-input-number v-model="archiveForm.retentionDays" :min="1" :max="3650" controls-position="right" />
+          </el-form-item>
+        </el-form>
+        <p class="archive-tip">最近更新时间：{{ archiveForm.updatedAt || '-' }}</p>
+      </div>
+      <template #footer>
+        <el-button @click="archiveDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="archiveSaving" @click="handleSaveArchive">保存策略</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -160,10 +218,12 @@ function tagType(level) {
 .stat-tip { margin: 0; color: #98a2b3; font-size: 12px; }
 .panel { background: #fff; border: 1px solid #e6ebf2; border-radius: 12px; padding: 14px; }
 .filter-panel { display: grid; gap: 10px; grid-template-columns: 2fr 1fr 1fr 2fr auto auto; }
+.archive-body { min-height: 120px; }
+.archive-tip { margin: 4px 0 0; color: #98a2b3; font-size: 12px; }
 @media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filter-panel { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .stats-grid { grid-template-columns: 1fr; } .actions { width: 100%; } .actions :deep(.el-button) { flex: 1; } .filter-panel { grid-template-columns: 1fr; } }
 :global(html.dark) .title { color: #e5eaf3; }
-:global(html.dark) .subtitle, :global(html.dark) .stat-label, :global(html.dark) .stat-tip { color: #a9b4c5; }
+:global(html.dark) .subtitle, :global(html.dark) .stat-label, :global(html.dark) .stat-tip, :global(html.dark) .archive-tip { color: #a9b4c5; }
 :global(html.dark) .panel, :global(html.dark) .stat-card { background: #1a2028; border-color: #2b3442; }
 </style>
 
